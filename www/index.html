@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07090e">
+<title>STIKERpop Taraz</title>
+<link rel="stylesheet" href="./vendor/leaflet.css">
+<script src="./vendor/leaflet.js"></script>
+<style>
+:root{
+  --bg:#07090e;--card:#0f141d;--card2:#090d14;--line:#1b2536;--line2:#2a3a52;
+  --txt:#f0f4f9;--mut:#8596aa;--acc:#25ff8e;--blue:#4ea5ff;--yel:#ffd043;--org:#ff8b3d;--red:#ff4d4d;
+  --glass:rgba(10,14,21,.92);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none;user-select:none;-webkit-user-select:none}
+input,select{user-select:text;-webkit-user-select:text}
+button{font-family:inherit;cursor:pointer}
+#map{position:fixed;inset:0;z-index:1;background:#06080b;will-change:transform;transform:translateZ(0);-webkit-transform:translateZ(0)}
+.leaflet-container{background:#06080b!important;font-family:inherit}
+#overlay{position:fixed;inset:0;z-index:2;pointer-events:none;will-change:transform;transform:translateZ(0);-webkit-transform:translateZ(0)}
+
+/* ФЛАЖКИ: стильный 3D тактический пин */
+.flag-wrap{background:transparent;border:none}
+.gta-flag{width:34px;height:42px;cursor:pointer;pointer-events:auto;filter:drop-shadow(0 4px 8px rgba(0,0,0,.9));transition:transform .12s cubic-bezier(.2,1,.3,1),opacity .2s;will-change:transform;transform:translateZ(0);-webkit-transform:translateZ(0)}
+.gta-flag svg{width:34px;height:42px;display:block;overflow:visible}
+.gta-flag:active{transform:scale(1.22) translateY(-3px)}
+.gta-flag.sel{filter:drop-shadow(0 0 10px #25ff8e) drop-shadow(0 4px 8px rgba(0,0,0,.95));transform:scale(1.15) translateY(-3px)}
+.gta-flag.dim{opacity:.4;filter:grayscale(.75);pointer-events:none}
+.gta-flag.gone{opacity:.55;filter:grayscale(.8)}
+.me-dot{width:16px;height:16px;border-radius:50%;background:#4ea5ff;border:3px solid #fff;box-shadow:0 0 0 0 rgba(78,165,255,.7);animation:pulse 2s infinite;margin:-8px 0 0 -8px}
+@keyframes pulse{70%{box-shadow:0 0 0 14px rgba(78,165,255,0)}100%{box-shadow:0 0 0 0 rgba(78,165,255,0)}}
+
+#mapHint{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;color:var(--mut);font-size:13px;background:var(--glass);border:1px solid var(--line);padding:9px 16px;border-radius:999px;display:none;pointer-events:none;text-align:center}
+
+#topCol{position:fixed;top:calc(10px + env(safe-area-inset-top));left:12px;right:12px;z-index:10;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+#topCol>*{pointer-events:auto}
+.dash-row{display:grid;grid-template-columns:1.25fr 1fr 1fr;gap:8px}
+.dash-card{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:16px;padding:9px 12px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.dash-card.main{border-color:rgba(78,165,255,.45);background:linear-gradient(135deg,rgba(16,28,45,.94),rgba(9,15,24,.96))}
+.dash-card .val{font-size:19px;font-weight:900;line-height:1.1}
+.dash-card .lbl{font-size:11px;color:var(--mut);margin-top:3px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dash-card.main .val{color:var(--blue);font-size:21px}
+.dash-card.fl .val{color:var(--acc)}
+#filters{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+#filters::-webkit-scrollbar{display:none}
+.chip{flex-shrink:0;background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);color:var(--txt);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700}
+.chip.on{background:var(--acc);color:#031b0e;border-color:var(--acc);font-weight:900}
+#remind{display:none;background:#261400;border:1px solid var(--org);color:#ffe4cc;border-radius:14px;padding:10px 14px;font-size:13px;font-weight:600}
+
+#fabs{position:fixed;right:12px;bottom:calc(156px + env(safe-area-inset-bottom));z-index:20;display:flex;flex-direction:column;gap:8px}
+.fab{width:48px;height:48px;border-radius:16px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--line);color:var(--txt);font-size:20px;display:flex;align-items:center;justify-content:center;touch-action:manipulation;box-shadow:0 8px 25px rgba(0,0,0,.6)}
+.fab.on{border-color:var(--acc);color:var(--acc);background:rgba(37,255,142,.18)}
+.fab:active{transform:scale(.93)}
+
+.btns{position:fixed;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:30;display:flex;flex-direction:column;gap:8px}
+#stickBtn{background:linear-gradient(180deg,#2dff97,#12dc72);border:none;color:#021c0e;font-weight:900;font-size:20px;letter-spacing:.5px;padding:19px 20px;border-radius:22px;box-shadow:0 10px 32px rgba(37,255,142,.4);touch-action:manipulation;display:flex;align-items:center;justify-content:center;gap:10px}
+#stickBtn:active{transform:scale(.97)}
+#stickBtn:disabled{opacity:.65}
+.nav{display:flex;gap:8px}
+.nav-btn{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:var(--txt);border:1px solid var(--line);border-radius:16px;padding:12px 6px;font-size:13px;font-weight:800;flex:1;white-space:nowrap;touch-action:manipulation}
+.nav-btn:active{transform:scale(.97);background:var(--card)}
+
+/* HUD района */
+#districtHud{position:fixed;left:12px;right:72px;bottom:calc(142px + env(safe-area-inset-bottom));z-index:25;background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line2);border-radius:18px;padding:12px 14px;box-shadow:0 10px 35px rgba(0,0,0,.7);display:none}
+#districtHud.show{display:block;animation:fadeUp .2s ease-out}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.hud-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.hud-title{font-size:16px;font-weight:900}
+.hud-close{background:none;border:none;color:var(--mut);font-size:16px;padding:0 2px}
+.hud-lvl{font-size:12px;font-weight:800;margin-top:2px}
+.hud-bar{height:7px;background:#070a0f;border-radius:99px;margin:8px 0 6px;overflow:hidden;border:1px solid var(--line)}
+.hud-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--blue),var(--acc));transition:width .3s}
+.hud-info{font-size:12px;color:var(--mut)}
+.hud-add{margin-top:8px;width:100%;background:var(--acc);color:#021b0e;border:none;border-radius:11px;padding:9px;font-size:13px;font-weight:900;display:none}
+
+#backdrop{position:fixed;inset:0;z-index:39;background:rgba(0,0,0,.65);display:none;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+#backdrop.show{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--card);border-top:1px solid var(--line2);border-radius:24px 24px 0 0;padding:14px 18px calc(24px + env(safe-area-inset-bottom));max-height:88vh;overflow:auto;display:none;box-shadow:0 -14px 45px rgba(0,0,0,.8)}
+.sheet.show{display:block;animation:slideUp .22s cubic-bezier(.16,1,.3,1)}
+@keyframes slideUp{from{transform:translateY(50px);opacity:0}to{transform:none;opacity:1}}
+.grab{width:46px;height:4px;background:var(--line2);border-radius:99px;margin:0 auto 12px}
+.sheet h2{margin:0 0 4px;font-size:20px;font-weight:900}
+.sheet h3{margin:18px 0 8px;font-size:16px;font-weight:800;color:#c8d5e5}
+.mut{color:var(--mut);font-size:13px;line-height:1.45}
+.x{float:right;background:var(--card2);border:1px solid var(--line);color:var(--mut);font-size:16px;width:34px;height:34px;border-radius:11px}
+.stat-box{background:var(--card2);border:1px solid var(--line);border-radius:18px;padding:15px;margin-top:12px}
+.stat-box.hl{border-color:rgba(78,165,255,.45);background:linear-gradient(145deg,#0c1726,#0a111a)}
+.stat-box.hl .big-val{font-size:36px;font-weight:900;color:var(--blue)}
+.sub-txt{font-size:13px;color:#a8bcd4;margin-top:3px}
+.progress-bar{height:10px;background:#06080c;border-radius:99px;overflow:hidden;margin-top:10px;border:1px solid var(--line)}
+.progress-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--acc));border-radius:99px;transition:width .4s}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.mini-stat{background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:12px}
+.mini-stat b{display:block;font-size:18px;font-weight:900}
+.mini-stat span{font-size:12px;color:var(--mut)}
+.district-item{padding:11px 14px;background:var(--card2);border:1px solid var(--line);border-radius:14px;margin-bottom:8px;cursor:pointer}
+.district-item.explored{border-color:rgba(37,255,142,.4);background:linear-gradient(90deg,#0a1d13,#0b141d)}
+.d-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.d-title{font-size:14px;font-weight:800}
+.d-pct{font-size:15px;font-weight:900;color:var(--acc)}
+.d-pct.zero{color:var(--mut);font-weight:600;font-size:13px}
+.d-sub{font-size:12px;color:var(--mut);margin-top:2px}
+.d-bar{height:5px;background:#070a0f;border-radius:99px;margin-top:7px;overflow:hidden}
+.d-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--acc))}
+.sticker-tags{display:flex;gap:8px;overflow-x:auto;padding:8px 0;scrollbar-width:none}
+.sticker-tags::-webkit-scrollbar{display:none}
+.tag-btn{padding:8px 12px;background:var(--card2);border:1px solid var(--line);border-radius:12px;font-size:14px;color:var(--txt);white-space:nowrap}
+.cond{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+.cond button{padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--card2);color:var(--txt);font-size:14px;font-weight:700}
+.cond button.sel{border-color:var(--acc);background:rgba(37,255,142,.16);color:var(--acc);font-weight:900}
+input,select{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:14px;padding:13px 14px;font-size:15px;margin-top:6px}
+label{font-size:13px;color:var(--mut);margin-top:14px;display:block;font-weight:700}
+.big{width:100%;padding:14px;border-radius:15px;border:none;font-weight:800;font-size:16px;margin-top:12px;display:block;text-align:center;text-decoration:none}
+.save{background:var(--acc);color:#021c0e}
+.ghost{background:var(--card2);color:var(--txt);border:1px solid var(--line)}
+.danger{background:#300d0d;color:#ffb3b3;border:1px solid #551c1c}
+.row2{display:flex;gap:8px}
+.row2>*{flex:1}
+.toggle{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px;font-weight:700}
+.toggle input{width:50px;height:28px;accent-color:var(--acc);margin:0}
+.item{display:flex;gap:12px;align-items:center;padding:12px 14px;background:var(--card2);border:1px solid var(--line);border-radius:14px;margin-bottom:8px}
+.item .fm{font-size:18px}
+.item .n{flex:1;min-width:0}
+.item .n b{display:block;font-size:14px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .n span{font-size:12px;color:var(--mut)}
+.item button{background:var(--card);border:1px solid var(--line2);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:800}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(235px + env(safe-area-inset-bottom));z-index:60;background:#000;border:1px solid var(--acc);color:var(--acc);padding:10px 14px 10px 18px;border-radius:999px;font-size:14px;font-weight:800;display:none;max-width:92vw;text-align:center;align-items:center;gap:12px;box-shadow:0 8px 30px rgba(0,0,0,.8)}
+#toast.show{display:flex}
+#toast button{background:var(--acc);color:#031b0e;border:none;border-radius:999px;padding:6px 12px;font-weight:800;font-size:12px}
+#empty{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);z-index:5;background:var(--glass);border:1px solid var(--line);border-radius:20px;padding:22px;text-align:center;max-width:320px;display:none;pointer-events:none}
+#empty b{font-size:18px}
+#onb{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.88);display:none;align-items:flex-end}
+#onb.show{display:flex}
+#onb .in{background:var(--card);border-radius:24px 24px 0 0;padding:24px 20px 32px;border-top:1px solid var(--line2);width:100%}
+#onb li{margin:10px 0;font-size:15px;line-height:1.45}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<canvas id="overlay"></canvas>
+<div id="mapHint">карта оффлайн — флажки и кнопки работают</div>
+
+<div id="topCol">
+  <div class="dash-row">
+    <div class="dash-card main"><div class="val" id="tPct">0.00%</div><div class="lbl">🏙️ Тараз открыт</div></div>
+    <div class="dash-card fl"><div class="val" id="tFlags">0</div><div class="lbl">🚩 Флажков</div></div>
+    <div class="dash-card"><div class="val" id="tDist">0/23</div><div class="lbl">🗺️ Районов</div></div>
+  </div>
+  <div id="remind"></div>
+  <div id="filters">
+    <button class="chip on" data-f="all" type="button">Все</button>
+    <button class="chip" data-f="fresh" type="button">🔥 Свежие</button>
+    <button class="chip" data-f="warn" type="button">🟡 Старые (>30 дн)</button>
+    <button class="chip" data-f="gone" type="button">💀 Сорванные</button>
+  </div>
+</div>
+
+<div id="empty"><b>Тараз скрыт в тумане 🌫️</b><div class="mut" style="margin-top:6px">Наклей стикер и жми зелёную кнопку — вокруг флажка откроется территория!</div></div>
+
+<div id="districtHud">
+  <div class="hud-head"><div class="hud-title" id="hudName">Район</div><button class="hud-close" id="hudClose" type="button">✕</button></div>
+  <div class="hud-lvl" id="hudLvl"></div>
+  <div class="hud-bar"><i id="hudBar" style="width:0%"></i></div>
+  <div class="hud-info" id="hudInfo"></div>
+  <button class="hud-add" id="hudAdd" type="button">🚩 Воткнуть флажок сюда</button>
+</div>
+
+<div id="fabs">
+  <button class="fab" id="locateBtn" type="button" aria-label="Где я">📍</button>
+  <button class="fab" id="cityBtn" type="button" aria-label="Весь город">🏙️</button>
+  <button class="fab" id="addModeBtn" type="button" aria-label="Режим тыка">✋</button>
+  <button class="fab on" id="fogBtn" type="button" aria-label="Туман">🌫️</button>
+</div>
+
+<div class="btns">
+  <button id="stickBtn" type="button"><span>🚩</span> НАКЛЕИЛ СТИКЕР ЗДЕСЬ</button>
+  <div class="nav">
+    <button class="nav-btn" id="statBtn" type="button">📊 Захват</button>
+    <button class="nav-btn" id="listOpen" type="button">📝 Флажки</button>
+    <button class="nav-btn" id="setBtn" type="button">⚙️ Настройки</button>
+  </div>
+</div>
+
+<div id="toast"><span id="toastTxt"></span><button id="toastAct" type="button" style="display:none"></button></div>
+<div id="backdrop"></div>
+
+<div class="sheet" id="pointSheet">
+  <div class="grab"></div><button class="x" data-close type="button">✕</button>
+  <h2 id="pTitle">Флажок</h2>
+  <div class="mut" id="pDates"></div>
+  <div class="mut" id="pAddr" style="margin-top:4px;font-weight:800;color:#c0d5ec"></div>
+  <div class="cond" id="pCond">
+    <button data-c="fire" type="button">🔥 Свежак</button>
+    <button data-c="ok" type="button">👌 На месте</button>
+    <button data-c="peel" type="button">🩹 Облезает</button>
+    <button data-c="gone" type="button">💀 Сорван</button>
+  </div>
+  <label>Быстрый тег</label>
+  <div class="sticker-tags" id="tagList">
+    <button class="tag-btn" data-tag="🐺 Волк" type="button">🐺 Волк</button>
+    <button class="tag-btn" data-tag="💀 Череп" type="button">💀 Череп</button>
+    <button class="tag-btn" data-tag="⚡ Молния" type="button">⚡ Молния</button>
+    <button class="tag-btn" data-tag="👑 Корона" type="button">👑 Корона</button>
+    <button class="tag-btn" data-tag="💣 Бомба" type="button">💣 Бомба</button>
+    <button class="tag-btn" data-tag="🚀 Ракета" type="button">🚀 Ракета</button>
+    <button class="tag-btn" data-tag="👁️ Глаз" type="button">👁️ Глаз</button>
+  </div>
+  <label>Заметка</label>
+  <input id="pNote" placeholder="напр: волк на столбе у остановки" autocomplete="off">
+  <button class="big save" id="pRefresh" type="button">✅ Был тут — флажок цел</button>
+  <div class="row2">
+    <button class="big ghost" id="pSave" type="button">Сохранить</button>
+    <a class="big ghost" id="pRoute" href="#">🧭 Маршрут</a>
+    <button class="big danger" id="pDel" type="button">Удалить</button>
+  </div>
+</div>
+
+<div class="sheet" id="statSheet">
+  <div class="grab"></div><button class="x" data-close type="button">✕</button>
+  <h2>📊 Сколько Тараза открыто</h2>
+  <div class="mut">Считается по реальной площади: сколько территории города попало в радиус твоих флажков.</div>
+  <div class="stat-box hl">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <div class="big-val" id="sPct">0.00%</div>
+      <div style="font-size:14px;color:#a0b4cc;font-weight:800" id="sLvl">Разведка</div>
+    </div>
+    <div class="sub-txt" id="sArea">0 из 0 км²</div>
+    <div class="progress-bar"><i id="sBar" style="width:0%"></i></div>
+  </div>
+  <div class="grid-2">
+    <div class="mini-stat"><b id="sAlive" style="color:var(--acc)">0</b><span>🚩 Флажков стоит</span></div>
+    <div class="mini-stat"><b id="sGone" style="color:#8899aa">0</b><span>💀 Сорвано</span></div>
+    <div class="mini-stat"><b id="sStreak" style="color:var(--yel)">0 дн.</b><span>⚡ Серия дней</span></div>
+    <div class="mini-stat"><b id="sLast">—</b><span>🕒 Последний</span></div>
+  </div>
+  <h3>🗺️ Районы (тап — перелёт)</h3>
+  <div id="sDistList"></div>
+  <h3>Резервная копия</h3>
+  <div class="row2">
+    <button class="big ghost" id="expBtn" type="button">⬆️ Экспорт</button>
+    <button class="big ghost" id="impBtn" type="button">⬇️ Импорт</button>
+  </div>
+  <input type="file" id="impFile" accept="application/json,.json" style="display:none">
+  <button class="big danger" id="wipeBtn" type="button" style="margin-top:10px">Стереть все флажки</button>
+</div>
+
+<div class="sheet" id="listSheet">
+  <div class="grab"></div><button class="x" data-close type="button">✕</button>
+  <h2>📝 Все флажки <span class="mut" id="lCount"></span></h2>
+  <input id="q" placeholder="Поиск: район, заметка, тег..." autocomplete="off">
+  <div id="list" style="margin-top:10px"></div>
+</div>
+
+<div class="sheet" id="setSheet">
+  <div class="grab"></div><button class="x" data-close type="button">✕</button>
+  <h2>⚙️ Настройки</h2>
+  <label>Радиус открытия вокруг флажка (метров)</label>
+  <input id="radius" type="number" min="50" max="400" value="120">
+  <label>Напомнить пойти клеить, если прошло (дней)</label>
+  <input id="remDays" type="number" min="1" max="90" value="7">
+  <div class="toggle"><span>🌫️ Туман на неоткрытых местах</span><input type="checkbox" id="showFog"></div>
+  <div class="toggle"><span>🗺️ Границы районов</span><input type="checkbox" id="showBound"></div>
+  <div class="toggle"><span>🔤 Названия районов</span><input type="checkbox" id="showLabels"></div>
+  <div class="toggle"><span>📳 Вибрация</span><input type="checkbox" id="vibro"></div>
+  <button class="big save" id="setSave" type="button">Сохранить</button>
+</div>
+
+<div id="onb"><div class="in">
+  <h2 style="margin:0 0 8px">🏙️ Захват Тараза</h2>
+  <ul class="mut" style="padding-left:18px;margin:6px 0 0">
+    <li>Весь город скрыт туманом. 23 района разделены чёткими линиями.</li>
+    <li>Наклеил стикер → зелёная кнопка → на карте встаёт <b>флажок 🚩</b>, а вокруг него <b>открывается территория</b>.</li>
+    <li>Процент считается по реальной площади города и каждого района.</li>
+  </ul>
+  <button class="big save" id="onbGo" type="button">Начать 🚀</button>
+</div></div>
+
+<script>
+(function(){
+'use strict';
+function $(id){return document.getElementById(id);}
+
+/* ================= ДАННЫЕ ТАРАЗА ================= */
+var TARAZ_CENTER=[42.898,71.378];
+var TARAZ_BORDER=[
+[42.82884,71.45218],[42.829,71.451],[42.82,71.439],[42.82,71.437],[42.823,71.434],[42.823,71.428],[42.816,71.406],
+[42.816,71.389],[42.812,71.388],[42.815,71.372],[42.812,71.371],[42.813,71.363],[42.816,71.35],[42.818,71.348],
+[42.82,71.335],[42.797,71.314],[42.792,71.312],[42.785,71.303],[42.786,71.3],[42.778,71.283],[42.778,71.268],
+[42.774,71.263],[42.774,71.259],[42.777,71.251],[42.782,71.245],[42.785,71.246],[42.786,71.244],[42.793,71.243],
+[42.794,71.249],[42.797,71.252],[42.815,71.246],[42.854,71.243],[42.853,71.235],[42.856,71.234],[42.859,71.234],
+[42.859,71.229],[42.869,71.229],[42.871,71.237],[42.874,71.238],[42.892,71.238],[42.893,71.243],[42.907,71.242],
+[42.91,71.244],[42.91,71.24],[42.915,71.239],[42.915,71.245],[42.919,71.248],[42.921,71.246],[42.931,71.251],
+[42.937,71.25],[42.941,71.241],[42.947,71.242],[42.952,71.235],[42.951,71.251],[42.945,71.262],[42.947,71.267],
+[42.954,71.268],[42.952,71.278],[42.955,71.283],[42.945,71.304],[42.948,71.316],[42.954,71.324],[42.967,71.31],
+[42.969,71.311],[42.961,71.332],[42.964,71.333],[42.966,71.34],[42.967,71.345],[42.963,71.35],[42.976,71.37],
+[42.97,71.372],[42.971,71.38],[42.968,71.381],[42.968,71.393],[42.96,71.394],[42.962,71.398],[42.961,71.411],
+[42.962,71.414],[42.96,71.426],[42.957,71.427],[42.962,71.429],[42.959,71.436],[42.96,71.439],[42.955,71.445],
+[42.956,71.446],[42.955,71.455],[42.952,71.452],[42.951,71.454],[42.954,71.46],[42.949,71.461],[42.947,71.464],
+[42.956,71.466],[42.956,71.471],[42.949,71.474],[42.95,71.476],[42.948,71.479],[42.95,71.483],[42.95,71.488],
+[42.945,71.492],[42.939,71.506],[42.937,71.505],[42.933,71.5],[42.93,71.502],[42.925,71.495],[42.923,71.499],
+[42.919,71.497],[42.911,71.489],[42.904,71.479],[42.896,71.475],[42.889,71.465],[42.888,71.456],[42.845,71.495],
+[42.84,71.49],[42.839,71.483],[42.835,71.477],[42.84,71.468],[42.84,71.462],[42.842,71.461],[42.836,71.464],
+[42.835,71.46],[42.831,71.455],[42.829,71.455],[42.82884,71.45218]];
+
+var TARAZ_DISTRICTS=[
+{"id":"cent","name":"Центр / пл. Достык","center":[42.9,71.378],"poly":[[42.89216,71.40003],[42.90264,71.39079],[42.90829,71.36253],[42.88648,71.37046],[42.88375,71.37635],[42.88189,71.38624],[42.88235,71.39467],[42.88254,71.39545]]},
+{"id":"m1","name":"1 мкр. Акбулак","center":[42.898,71.345],"poly":[[42.89576,71.33446],[42.89156,71.33993],[42.89931,71.35285],[42.91198,71.35976],[42.91347,71.35925]]},
+{"id":"m2","name":"2 мкр. Каратау","center":[42.893,71.348],"poly":[[42.88776,71.34227],[42.89093,71.3518],[42.89931,71.35285],[42.89156,71.33993]]},
+{"id":"m3","name":"3 мкр. Жайлау","center":[42.892,71.356],"poly":[[42.91198,71.35976],[42.89931,71.35285],[42.89093,71.3518],[42.88635,71.35562],[42.88471,71.35971],[42.88525,71.36772],[42.88648,71.37046],[42.90829,71.36253]]},
+{"id":"m4","name":"4 мкр. Салтанат","center":[42.887,71.35],"poly":[[42.88135,71.34312],[42.88635,71.35562],[42.89093,71.3518],[42.88776,71.34227]]},
+{"id":"m5","name":"5 мкр. Талас","center":[42.882,71.352],"poly":[[42.8733,71.3417],[42.86752,71.34223],[42.86729,71.34229],[42.88471,71.35971],[42.88635,71.35562],[42.88135,71.34312]]},
+{"id":"m6","name":"6 мкр. Алатау","center":[42.877,71.357],"poly":[[42.86384,71.34263],[42.86558,71.35543],[42.88525,71.36772],[42.88471,71.35971],[42.86729,71.34229]]},
+{"id":"m7","name":"7 мкр. Мынбулак","center":[42.872,71.365],"poly":[[42.86292,71.36446],[42.88375,71.37635],[42.88648,71.37046],[42.88525,71.36772],[42.86558,71.35543]]},
+{"id":"m8","name":"8 мкр. Аса","center":[42.868,71.372],"poly":[[42.85711,71.37076],[42.88189,71.38624],[42.88375,71.37635],[42.86292,71.36446]]},
+{"id":"m9","name":"9 мкр. Самал","center":[42.863,71.38],"poly":[[42.84456,71.37578],[42.88235,71.39467],[42.88189,71.38624],[42.85711,71.37076]]},
+{"id":"m10","name":"10 мкр.","center":[42.859,71.388],"poly":[[42.88254,71.39545],[42.88235,71.39467],[42.84456,71.37578],[42.8,71.38214],[42.8,71.44961]]},
+{"id":"m11","name":"11 мкр.","center":[42.885,71.335],"poly":[[42.90083,71.31417],[42.8733,71.3417],[42.88135,71.34312],[42.88776,71.34227],[42.89156,71.33993],[42.89576,71.33446]]},
+{"id":"m12","name":"12 мкр. Астана","center":[42.88,71.33],"poly":[[42.91715,71.27337],[42.897,71.298],[42.86752,71.34223],[42.8733,71.3417],[42.90083,71.31417]]},
+{"id":"m13","name":"13 мкр. Байтерек","center":[42.874,71.326],"poly":[[42.897,71.298],[42.85648,71.33852],[42.86384,71.34263],[42.86729,71.34229],[42.86752,71.34223]]},
+{"id":"m14","name":"14 мкр.","center":[42.869,71.321],"poly":[[42.85648,71.33852],[42.897,71.298],[42.91715,71.27337],[42.92332,71.26168],[42.84912,71.33588]]},
+{"id":"m15","name":"15 мкр.","center":[42.864,71.316],"poly":[[42.84912,71.33588],[42.92332,71.26168],[42.93601,71.24],[42.8,71.24],[42.8,71.32583]]},
+{"id":"zalin","name":"Залинейный район","center":[42.915,71.395],"poly":[[42.93,71.415],[42.92,71.385],[42.90264,71.39079],[42.89216,71.40003],[42.89977,71.41068]]},
+{"id":"vokzal","name":"Привокзальный","center":[42.91,71.38],"poly":[[42.93417,71.35667],[42.91347,71.35925],[42.91198,71.35976],[42.90829,71.36253],[42.90264,71.39079],[42.92,71.385]]},
+{"id":"sah","name":"Сахарный завод","center":[42.93,71.39],"poly":[[42.93417,71.35667],[42.92,71.385],[42.93,71.415],[42.96,71.43],[42.96,71.34375]]},
+{"id":"him","name":"Химпосёлок","center":[42.88,71.42],"poly":[[42.89977,71.41068],[42.89216,71.40003],[42.88254,71.39545],[42.8,71.44961],[42.8,71.48],[42.87667,71.48]]},
+{"id":"taiwan","name":"Массив Тайвань","center":[42.905,71.34],"poly":[[42.93601,71.24],[42.92332,71.26168],[42.91715,71.27337],[42.90083,71.31417],[42.89576,71.33446],[42.91347,71.35925],[42.93417,71.35667],[42.96,71.34375],[42.96,71.24]]},
+{"id":"tortkul","name":"Массив Торткуль","center":[42.855,71.36],"poly":[[42.84456,71.37578],[42.85711,71.37076],[42.86292,71.36446],[42.86558,71.35543],[42.86384,71.34263],[42.85648,71.33852],[42.84912,71.33588],[42.8,71.32583],[42.8,71.38214]]},
+{"id":"kirov","name":"Киров / Кожкомбинат","center":[42.91,71.43],"poly":[[42.93,71.415],[42.89977,71.41068],[42.87667,71.48],[42.96,71.48],[42.96,71.43]]}
+];
+
+function inPoly(lat,lng,poly){
+  var ins=false;
+  for(var i=0,j=poly.length-1;i<poly.length;j=i++){
+    var xi=poly[i][1],yi=poly[i][0],xj=poly[j][1],yj=poly[j][0];
+    if(((yi>lat)!==(yj>lat))&&(lng<(xj-xi)*(lat-yi)/(yj-yi)+xi))ins=!ins;
+  }
+  return ins;
+}
+function distM(a,b,c,d){
+  var r=6371000,t=Math.PI/180,dl=(c-a)*t,dn=(d-b)*t;
+  var x=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(a*t)*Math.cos(c*t)*Math.sin(dn/2)*Math.sin(dn/2);
+  return 2*r*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+function districtIndexAt(lat,lng){
+  for(var i=0;i<TARAZ_DISTRICTS.length;i++)if(inPoly(lat,lng,TARAZ_DISTRICTS[i].poly))return i;
+  var best=0,m=Infinity;
+  for(var j=0;j<TARAZ_DISTRICTS.length;j++){var d=distM(lat,lng,TARAZ_DISTRICTS[j].center[0],TARAZ_DISTRICTS[j].center[1]);if(d<m){m=d;best=j;}}
+  return best;
+}
+function districtAt(lat,lng){
+  if(!inPoly(lat,lng,TARAZ_BORDER))return null;
+  return TARAZ_DISTRICTS[districtIndexAt(lat,lng)];
+}
+
+/* ===== РЕШЁТКА ДЛЯ ЧЕСТНОЙ ПЛОЩАДИ (шаг 100 м) =====
+   Считаем, какая доля территории города/района попала в радиус открытия флажков. */
+var STEP=100;
+var G={};
+(function buildGrid(){
+  var minLat=999,maxLat=-999,minLng=999,maxLng=-999;
+  TARAZ_BORDER.forEach(function(p){if(p[0]<minLat)minLat=p[0];if(p[0]>maxLat)maxLat=p[0];if(p[1]<minLng)minLng=p[1];if(p[1]>maxLng)maxLng=p[1];});
+  var lat0=(minLat+maxLat)/2;
+  var dLat=STEP/111320,dLng=STEP/(111320*Math.cos(lat0*Math.PI/180));
+  var rows=Math.ceil((maxLat-minLat)/dLat)+1,cols=Math.ceil((maxLng-minLng)/dLng)+1;
+  var idx=new Int32Array(rows*cols).fill(-1),dist=[],n=0;
+  for(var r=0;r<rows;r++)for(var c=0;c<cols;c++){
+    var la=minLat+(r+.5)*dLat,ln=minLng+(c+.5)*dLng;
+    if(inPoly(la,ln,TARAZ_BORDER)){idx[r*cols+c]=n++;dist.push(districtIndexAt(la,ln));}
+  }
+  var tot=new Array(TARAZ_DISTRICTS.length).fill(0);
+  dist.forEach(function(d){tot[d]++;});
+  G={minLat:minLat,minLng:minLng,dLat:dLat,dLng:dLng,rows:rows,cols:cols,idx:idx,dist:dist,n:n,tot:tot};
+  TARAZ_DISTRICTS.forEach(function(d){
+    var minLa=999,maxLa=-999,minLn=999,maxLn=-999;
+    d.poly.forEach(function(p){
+      if(p[0]<minLa)minLa=p[0];if(p[0]>maxLa)maxLa=p[0];
+      if(p[1]<minLn)minLn=p[1];if(p[1]>maxLn)maxLn=p[1];
+    });
+    d.bbox={minLat:minLa,maxLat:maxLa,minLng:minLn,maxLng:maxLn};
+  });
+})();
+function coverage(radius){
+  var cov=new Uint8Array(G.n),cnt=0,dc=new Array(TARAZ_DISTRICTS.length).fill(0);
+  var rc=Math.ceil(radius/STEP),r2=(radius/STEP)*(radius/STEP);
+  S.points.forEach(function(p){
+    if(p.cond==='gone')return;
+    var c0=Math.floor((p.lng-G.minLng)/G.dLng),r0=Math.floor((p.lat-G.minLat)/G.dLat);
+    for(var dr=-rc;dr<=rc;dr++){var r=r0+dr;if(r<0||r>=G.rows)continue;
+      for(var dcI=-rc;dcI<=rc;dcI++){var c=c0+dcI;if(c<0||c>=G.cols)continue;
+        if(dr*dr+dcI*dcI>r2)continue;
+        var k=G.idx[r*G.cols+c];if(k<0||cov[k])continue;
+        cov[k]=1;cnt++;dc[G.dist[k]]++;
+      }}
+  });
+  return {count:cnt,pct:cnt/G.n*100,dist:dc};
+}
+var cachedCov=null,cachedPairs=null;
+function getCoverage(){
+  if(!cachedCov)cachedCov=coverage(S.radius);
+  return cachedCov;
+}
+function getConnectedPairs(){
+  if(cachedPairs)return cachedPairs;
+  var active=S.points.filter(function(p){return p.cond!=='gone';});
+  var pairs=[];
+  var thresholdM=S.radius*2.2;
+  var dLatMax=thresholdM/111320;
+  var dLngMax=thresholdM/(111320*0.732);
+  for(var i=0;i<active.length;i++){
+    var p1=active[i],neighbors=[];
+    for(var j=0;j<active.length;j++){
+      if(i===j)continue;
+      var p2=active[j];
+      if(Math.abs(p1.lat-p2.lat)>dLatMax||Math.abs(p1.lng-p2.lng)>dLngMax)continue;
+      var d=distM(p1.lat,p1.lng,p2.lat,p2.lng);
+      if(d<=thresholdM)neighbors.push({idx:j,d:d,p:p2});
+    }
+    neighbors.sort(function(a,b){return a.d-b.d;});
+    var kMax=Math.min(neighbors.length,2);
+    for(var k=0;k<kMax;k++){
+      var j=neighbors[k].idx;
+      if(i<j)pairs.push([p1,neighbors[k].p]);
+    }
+  }
+  return (cachedPairs=pairs);
+}
+function invalidateCoverage(){
+  cachedCov=null;
+  cachedPairs=null;
+  window.__cov=null;
+}
+function km2(n){return n*STEP*STEP/1e6;}
+function levelOf(p){
+  if(p<=0)return {n:'Скрыт в тумане',c:'#8596aa'};
+  if(p<3)return {n:'Разведка',c:'#8cc8ff'};
+  if(p<20)return {n:'Влияние',c:'#4ea5ff'};
+  if(p<50)return {n:'Контроль',c:'#ffd043'};
+  if(p<85)return {n:'Доминирование',c:'#ff8b3d'};
+  return {n:'👑 Цитадель',c:'#25ff8e'};
+}
+function fmtPct(p){return p<0.1?p.toFixed(2)+'%':(p<10?p.toFixed(1)+'%':Math.round(p)+'%');}
+
+/* ================= СОСТОЯНИЕ ================= */
+var LS='stikerpop.v2';
+var S={points:[],remDays:7,radius:120,showFog:true,showBound:true,showLabels:true,vibro:true,seen:false,filter:'all',ver:5};
+try{var raw=localStorage.getItem(LS);if(raw){var j=JSON.parse(raw);for(var k in j)S[k]=j[k];}}catch(e){}
+S.filter='all'; // Всегда запускаем в режиме «Все», чтобы флажки не гасли при старте
+if(!Array.isArray(S.points))S.points=[];
+if((S.ver||0)<5){S.radius=120;S.ver=5;}
+S.points.forEach(function(p){if(!p.id)p.id=Date.now().toString(36)+Math.random().toString(36).slice(2,7);});
+function save(){try{localStorage.setItem(LS,JSON.stringify(S));}catch(e){}}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function daysAgo(t){return Math.max(0,Math.floor((Date.now()-t)/86400000));}
+function fmtD(t){try{return new Date(t).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+function fmtDT(t){try{return new Date(t).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});}catch(e){return '';}}
+function ageOf(p){return daysAgo(p.checkedAt||p.createdAt);}
+function color(p){
+  if(p.cond==='gone')return '#718294';
+  if(p.cond==='peel')return '#ff8b3d';
+  var d=ageOf(p);
+  if(p.cond==='fire'||d<=7)return '#25ff8e';
+  if(d<=30)return '#ffd043';
+  if(d<=90)return '#ff8b3d';
+  return '#718294';
+}
+function freshAlpha(p){var d=ageOf(p);return p.cond==='fire'||d<=30?1:(d<=90?.8:.6);}
+function passFilter(p){
+  var f=S.filter||'all';
+  if(f==='all')return true;
+  if(f==='gone')return p.cond==='gone';
+  if(p.cond==='gone')return false;
+  var d=ageOf(p);
+  if(f==='fresh')return d<=30&&p.cond!=='peel';
+  if(f==='warn')return d>30||p.cond==='peel';
+  return true;
+}
+function byId(id){for(var i=0;i<S.points.length;i++)if(S.points[i].id===id)return S.points[i];return null;}
+function calcStreak(){
+  var set={};S.points.forEach(function(p){var d=new Date(p.createdAt);set[d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate()]=1;});
+  var d=new Date(),n=0;function k(x){return x.getFullYear()+'-'+x.getMonth()+'-'+x.getDate();}
+  if(!set[k(d)])d.setDate(d.getDate()-1);
+  while(set[k(d)]){n++;d.setDate(d.getDate()-1);}
+  return n;
+}
+function getPos(){return new Promise(function(res,rej){
+  try{if(!navigator.geolocation)return rej(new Error('no geo'));
+    navigator.geolocation.getCurrentPosition(function(p){res({ll:[p.coords.latitude,p.coords.longitude],acc:p.coords.accuracy});},rej,{enableHighAccuracy:true,timeout:12000,maximumAge:5000});
+  }catch(e){rej(e);}
+});}
+var toastT=null;
+function toast(t,al,fn){
+  try{var e=$('toast'),b=$('toastAct');$('toastTxt').textContent=t;
+    if(al){b.style.display='block';b.textContent=al;b.onclick=function(){e.classList.remove('show');try{fn&&fn();}catch(_){}};}
+    else{b.style.display='none';b.onclick=null;}
+    e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(function(){e.classList.remove('show');},al?5500:2300);
+  }catch(_){}
+}
+function vib(ms){try{if(S.vibro!==false&&navigator.vibrate)navigator.vibrate(ms);}catch(e){}}
+
+/* ================= UI ================= */
+var cur=null,addMode=false,map=null,mapOK=false,flagsLayer=null,meMarker=null,hudCtx=null;
+var SHEETS=['pointSheet','statSheet','setSheet','listSheet'];
+function hideHud(){$('districtHud').classList.remove('show');hudCtx=null;}
+function closeAll(){SHEETS.forEach(function(id){$(id).classList.remove('show');});$('backdrop').classList.remove('show');if(cur){cur=null;renderFlags();}}
+function openSheet(id){SHEETS.forEach(function(s){$(s).classList.remove('show');});hideHud();$(id).classList.add('show');$('backdrop').classList.add('show');}
+$('backdrop').onclick=closeAll;
+document.querySelectorAll('[data-close]').forEach(function(b){b.onclick=closeAll;});
+$('hudClose').onclick=hideHud;
+$('statBtn').onclick=function(){renderStats();openSheet('statSheet');};
+$('listOpen').onclick=function(){renderList();openSheet('listSheet');};
+$('setBtn').onclick=function(){
+  $('radius').value=S.radius;$('remDays').value=S.remDays;
+  $('showFog').checked=!!S.showFog;$('showBound').checked=!!S.showBound;$('showLabels').checked=!!S.showLabels;$('vibro').checked=S.vibro!==false;
+  openSheet('setSheet');
+};
+$('setSave').onclick=function(){
+  S.radius=Math.min(400,Math.max(50,parseInt($('radius').value,10)||120));
+  S.remDays=Math.min(90,Math.max(1,parseInt($('remDays').value,10)||7));
+  S.showFog=$('showFog').checked;S.showBound=$('showBound').checked;S.showLabels=$('showLabels').checked;S.vibro=$('vibro').checked;
+  save();invalidateCoverage();$('fogBtn').classList.toggle('on',S.showFog);renderAll();closeAll();toast('Сохранено ✅');
+};
+$('addModeBtn').onclick=function(){addMode=!addMode;$('addModeBtn').classList.toggle('on',addMode);if(addMode)toast('Режим тыка: тапни по карте — встанет флажок');};
+$('fogBtn').classList.toggle('on',!!S.showFog);
+$('fogBtn').onclick=function(){S.showFog=!S.showFog;save();$('fogBtn').classList.toggle('on',S.showFog);toast(S.showFog?'🌫️ Туман включён':'☀️ Туман выключен');drawOverlay();};
+$('cityBtn').onclick=function(){if(mapOK)map.fitBounds(L.latLngBounds(TARAZ_BORDER),{padding:[20,20]});};
+document.querySelectorAll('#filters .chip[data-f]').forEach(function(c){
+  c.classList.toggle('on',c.dataset.f===(S.filter||'all'));
+  c.onclick=function(){
+    var target=c.dataset.f;
+    if(target!=='all'){
+      var matchCount=S.points.filter(function(p){
+        if(p.cond==='gone')return target==='gone';
+        if(target==='gone')return false;
+        var d=ageOf(p);
+        if(target==='fresh')return d<=30&&p.cond!=='peel';
+        if(target==='warn')return d>30||p.cond==='peel';
+        return true;
+      }).length;
+      if(matchCount===0){
+        toast(target==='warn'?'🟡 Старых флажков (>30 дн) нет — все '+S.points.length+' свежие 🔥':(target==='gone'?'💀 Сорванных флажков пока нет':'🔥 Свежих флажков пока нет'));
+        return;
+      }
+    }
+    S.filter=(S.filter===target&&target!=='all')?'all':target;
+    save();
+    document.querySelectorAll('#filters .chip[data-f]').forEach(function(x){x.classList.toggle('on',x.dataset.f===S.filter);});
+    renderFlags();
+  };
+});
+function setMe(ll){
+  if(!mapOK)return;
+  try{if(meMarker)map.removeLayer(meMarker);
+    meMarker=L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="me-dot"></div>',iconSize:[0,0]}),interactive:false,zIndexOffset:2000}).addTo(map);
+  }catch(e){}
+}
+$('locateBtn').onclick=function(){
+  toast('Ловлю GPS…');
+  getPos().then(function(r){if(mapOK){map.setView(r.ll,16);setMe(r.ll);}}).catch(function(){toast('GPS не дался');});
+};
+$('stickBtn').onclick=function(){
+  var b=$('stickBtn');b.disabled=true;var old=b.innerHTML;b.innerHTML='<span>⏳</span> ЛОВЛЮ GPS…';
+  getPos().then(function(r){
+    b.disabled=false;b.innerHTML=old;
+    if(mapOK){try{map.setView(r.ll,17);setMe(r.ll);}catch(e){}}
+    addPoint(r.ll[0],r.ll[1],r.acc);
+  }).catch(function(){
+    b.disabled=false;b.innerHTML=old;toast('GPS недоступен — включи ✋ и тапни по карте');
+    addMode=true;$('addModeBtn').classList.add('on');
+  });
+};
+document.querySelectorAll('#tagList .tag-btn').forEach(function(btn){
+  btn.onclick=function(){var i=$('pNote'),t=btn.dataset.tag;if(i.value.indexOf(t)===-1)i.value=(i.value?i.value+' ':'')+t;vib(15);};
+});
+
+/* ================= ФЛАЖКИ ================= */
+function flagIcon(p,sel,isDim){
+  var col=color(p);
+  var sym=p.cond==='fire'?'🔥':(p.cond==='ok'?'👌':(p.cond==='peel'?'🩹':'💀'));
+  var cls='gta-flag'+(sel?' sel':'')+(isDim?' dim':'')+(p.cond==='gone'?' gone':'');
+  var html='<div class="'+cls+'">'
+   +'<svg width="34" height="42" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">'
+   +'<ellipse cx="9" cy="39" rx="7" ry="2.2" fill="rgba(0,0,0,0.7)"/>'
+   +'<ellipse cx="9" cy="39" rx="4" ry="1.2" fill="none" stroke="'+col+'" stroke-width="1.2" opacity="0.9"/>'
+   +'<line x1="9" y1="4" x2="9" y2="39" stroke="#05080d" stroke-width="3.2" stroke-linecap="round"/>'
+   +'<line x1="9" y1="4" x2="9" y2="38" stroke="#f0f5fc" stroke-width="1.8" stroke-linecap="round"/>'
+   +'<circle cx="9" cy="4" r="2.8" fill="#ffd043" stroke="#05080d" stroke-width="0.9"/>'
+   +'<path d="M9 5 C17 2 24 7.5 33 5 L30 14 L33 23 C24 25.5 17 20 9 23 Z" fill="#05080d"/>'
+   +'<path d="M9 5.8 C16.5 3 23.5 8 32 5.8 L29.2 14 L32 22.2 C23.5 24.5 16.5 19.2 9 22.2 Z" fill="'+col+'"/>'
+   +'<path d="M9 6 C16 3.5 23 8 31 6.5 L30 10.5 C22 11.5 15 7.5 9 9.5 Z" fill="rgba(255,255,255,0.45)"/>'
+   +'<text x="20" y="15" font-size="10" font-family="system-ui,sans-serif" text-anchor="middle" dominant-baseline="middle">'+sym+'</text>'
+   +'</svg></div>';
+  return L.divIcon({className:'flag-wrap',html:html,iconSize:[34,42],iconAnchor:[9,39]});
+}
+function renderFlags(){
+  if(!mapOK)return;
+  flagsLayer.clearLayers();
+  var f=S.filter||'all';
+  var matching=0;
+  S.points.forEach(function(p){
+    var pass=passFilter(p);
+    if(pass)matching++;
+    var isDim=f!=='all'&&!pass;
+    var m=L.marker([p.lat,p.lng],{
+      icon:flagIcon(p,cur&&cur.id===p.id,isDim),
+      zIndexOffset:isDim?0:(p.cond==='gone'?50:500)
+    });
+    m.on('click',function(){openPoint(p.id);vib(20);});
+    m.addTo(flagsLayer);
+  });
+  if(f!=='all'&&matching===0&&S.points.length>0){
+    toast('В фильтре «'+(f==='fresh'?'Свежие':(f==='warn'?'Старые':'Сорванные'))+'» пока нет флажков');
+  }
+}
+
+function addPoint(lat,lng,acc){
+  for(var i=0;i<S.points.length;i++){var q=S.points[i];
+    if(q.cond!=='gone'&&distM(lat,lng,q.lat,q.lng)<10){vib(20);toast('Здесь уже стоит флажок — открываю');openPoint(q.id);return q;}
+  }
+  var before=getCoverage().pct;
+  var d=districtAt(lat,lng);
+  var p={id:uid(),lat:+Number(lat).toFixed(6),lng:+Number(lng).toFixed(6),createdAt:Date.now(),checkedAt:Date.now(),cond:'ok',
+    district:d?d.name:'За чертой города',districtId:d?d.id:'',note:''};
+  S.points.push(p);save();invalidateCoverage();renderAll();vib(50);
+  var gain=getCoverage().pct-before;
+  toast('🚩 '+p.district+(gain>0.0004?' · +'+gain.toFixed(2)+'% города':'')+((acc&&acc>50)?' · ±'+Math.round(acc)+' м':''),'Отменить',function(){
+    S.points=S.points.filter(function(x){return x.id!==p.id;});save();invalidateCoverage();renderAll();
+  });
+  return p;
+}
+function openPoint(id){
+  cur=byId(id);if(!cur)return;
+  $('pTitle').textContent=cur.note||cur.district||'Флажок';
+  $('pDates').textContent='Поставлен: '+fmtDT(cur.createdAt)+' · Проверен: '+fmtDT(cur.checkedAt||cur.createdAt);
+  $('pAddr').textContent='📍 '+(cur.district||'г. Тараз');
+  document.querySelectorAll('#pCond button').forEach(function(b){b.classList.toggle('sel',b.dataset.c===cur.cond);});
+  $('pNote').value=cur.note||'';
+  $('pRoute').href='geo:'+cur.lat+','+cur.lng+'?q='+cur.lat+','+cur.lng;
+  openSheet('pointSheet');renderFlags();
+}
+document.querySelectorAll('#pCond button').forEach(function(btn){
+  btn.onclick=function(){if(!cur)return;cur.cond=btn.dataset.c;
+    document.querySelectorAll('#pCond button').forEach(function(x){x.classList.toggle('sel',x===btn);});
+    save();invalidateCoverage();renderAll();vib(20);};
+});
+$('pSave').onclick=function(){if(!cur)return;cur.note=($('pNote').value||'').trim();save();closeAll();renderAll();toast('Сохранено');};
+$('pRefresh').onclick=function(){if(!cur)return;cur.note=($('pNote').value||'').trim();cur.checkedAt=Date.now();if(cur.cond==='gone'||cur.cond==='peel')cur.cond='ok';save();invalidateCoverage();closeAll();renderAll();toast('Флажок обновлён ✅');vib(25);};
+$('pDel').onclick=function(){
+  if(!cur)return;var del=cur,idx=S.points.indexOf(del);
+  S.points=S.points.filter(function(p){return p.id!==del.id;});save();invalidateCoverage();closeAll();renderAll();
+  toast('Флажок удалён','Вернуть',function(){S.points.splice(Math.min(idx,S.points.length),0,del);save();invalidateCoverage();renderAll();});
+};
+
+/* HUD района */
+function showHud(d,i,cv,tapLL){
+  cv=cv||getCoverage();
+  var dc=cv.dist[i],tot=G.tot[i],pct=tot?dc/tot*100:0,lv=levelOf(pct);
+  var flags=S.points.filter(function(p){return p.cond!=='gone'&&p.districtId===d.id;}).length;
+  $('hudName').textContent=d.name;
+  $('hudLvl').textContent=lv.n+(pct>0?' · '+fmtPct(pct):'');$('hudLvl').style.color=lv.c;
+  $('hudBar').style.width=Math.max(pct>0?4:0,Math.min(100,pct))+'%';
+  $('hudInfo').textContent='Открыто '+km2(dc).toFixed(2)+' из '+km2(tot).toFixed(2)+' км² · флажков: '+flags;
+  var add=$('hudAdd');
+  if(tapLL){add.style.display='block';add.onclick=function(){addPoint(tapLL.lat,tapLL.lng);hideHud();};}else add.style.display='none';
+  $('districtHud').classList.add('show');
+}
+
+/* бэкап */
+$('expBtn').onclick=function(){
+  var json=JSON.stringify(S,null,2),name='stikerpop-taraz-'+new Date().toISOString().slice(0,10)+'.json';
+  try{var f=new File([json],name,{type:'application/json'});if(navigator.canShare&&navigator.canShare({files:[f]})){navigator.share({files:[f],title:'STIKERpop backup'}).catch(function(){});return;}}catch(e){}
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(function(){try{a.remove();}catch(e){}},500);toast('Бэкап скачан');
+};
+$('impBtn').onclick=function(){$('impFile').click();};
+$('impFile').onchange=function(e){
+  var f=e.target.files[0];if(!f)return;var r=new FileReader();
+  r.onload=function(){try{
+    var j=JSON.parse(r.result);if(!j||!Array.isArray(j.points)){toast('Это не бэкап');return;}
+    var have={};S.points.forEach(function(p){have[p.id]=1;});var added=0;
+    j.points.forEach(function(p){
+      if(!p||!isFinite(p.lat)||!isFinite(p.lng))return;
+      var id=String(p.id||uid());if(have[id])return;have[id]=1;
+      var d=districtAt(+p.lat,+p.lng);
+      S.points.push({id:id,lat:+p.lat,lng:+p.lng,createdAt:+p.createdAt||Date.now(),checkedAt:+p.checkedAt||+p.createdAt||Date.now(),
+        cond:['fire','ok','peel','gone'].indexOf(p.cond)>=0?p.cond:'ok',district:d?d.name:'За чертой города',districtId:d?d.id:'',note:String(p.note||'').slice(0,300)});
+      added++;
+    });
+    save();invalidateCoverage();renderAll();toast('Импорт: +'+added+' (дубли пропущены)');
+  }catch(err){toast('Не прочитал файл');}};
+  r.readAsText(f);e.target.value='';
+};
+$('wipeBtn').onclick=function(){
+  if(!confirm('Стереть ВСЕ флажки?'))return;
+  var bak=S.points;S.points=[];save();invalidateCoverage();closeAll();renderAll();
+  toast('Всё стёрто','Вернуть',function(){S.points=bak;save();invalidateCoverage();renderAll();});
+};
+function finishOnb(){S.seen=true;save();$('onb').classList.remove('show');}
+if(!S.seen)$('onb').classList.add('show');
+$('onbGo').onclick=finishOnb;
+$('onb').onclick=function(e){if(e.target===$('onb'))finishOnb();};
+
+/* ================= ОВЕРЛЕЙ: ТУМАН + СВЯЗНЫЕ ЗОНЫ ЗАХВАТА (GTA 5 STYLE) ================= */
+var cv=$('overlay'),ctx=cv.getContext('2d');
+var raf=0,lastDrawTime=0;
+function sizeCanvases(){
+  var dpr=Math.min(window.devicePixelRatio||1,2.0); // лимит 2x для колоссальной экономии памяти GPU
+  var w=window.innerWidth,h=window.innerHeight;
+  var tw=Math.round(w*dpr),th=Math.round(h*dpr);
+  if(cv.width!==tw||cv.height!==th){
+    cv.width=tw;cv.height=th;
+    cv.style.width=w+'px';cv.style.height=h+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  return {w:w,h:h};
+}
+function pxPoly(poly){return poly.map(function(p){var q=map.latLngToContainerPoint(p);return [q.x,q.y];});}
+function tracePath(c,pts){c.beginPath();for(var i=0;i<pts.length;i++){if(i)c.lineTo(pts[i][0],pts[i][1]);else c.moveTo(pts[i][0],pts[i][1]);}c.closePath();}
+
+/* БЫСТРОЕ ПОСТРОЕНИЕ КОРИДОРОВ ИЗ ПРЕДРАССЧИТАННЫХ ПАР */
+function getTerritoryCorridors(rPx,w,h){
+  var corridors=[];
+  var pairs=getConnectedPairs();
+  var wHalf=rPx*0.88;
+  for(var k=0;k<pairs.length;k++){
+    var p1=pairs[k][0],p2=pairs[k][1];
+    var q1=map.latLngToContainerPoint([p1.lat,p1.lng]);
+    var q2=map.latLngToContainerPoint([p2.lat,p2.lng]);
+    if((q1.x<-rPx*2&&q2.x<-rPx*2)||(q1.x>w+rPx*2&&q2.x>w+rPx*2)||
+       (q1.y<-rPx*2&&q2.y<-rPx*2)||(q1.y>h+rPx*2&&q2.y>h+rPx*2))continue;
+    var dx=q2.x-q1.x,dy=q2.y-q1.y;
+    var dPx=Math.sqrt(dx*dx+dy*dy);
+    if(dPx>0.5){
+      var nx=-dy/dPx,ny=dx/dPx;
+      corridors.push([
+        {x:q1.x+nx*wHalf,y:q1.y+ny*wHalf},
+        {x:q2.x+nx*wHalf,y:q2.y+ny*wHalf},
+        {x:q2.x-nx*wHalf,y:q2.y-ny*wHalf},
+        {x:q1.x-nx*wHalf,y:q1.y-ny*wHalf}
+      ]);
+    }
+  }
+  return corridors;
+}
+
+/* ЗАЛИВКА КАЖДОЙ ФИГУРЫ ОТДЕЛЬНО: исключает баги winding rule и черные полумесяцы */
+function eraseTerritory(c,activePx,corridors,rPx){
+  for(var i=0;i<activePx.length;i++){
+    var pt=activePx[i];
+    c.beginPath();
+    c.arc(pt.x,pt.y,rPx,0,Math.PI*2);
+    c.fill();
+  }
+  for(var k=0;k<corridors.length;k++){
+    var q=corridors[k];
+    c.beginPath();
+    c.moveTo(q[0].x,q[0].y);
+    c.lineTo(q[1].x,q[1].y);
+    c.lineTo(q[2].x,q[2].y);
+    c.lineTo(q[3].x,q[3].y);
+    c.closePath();
+    c.fill();
+  }
+}
+
+/* Троттлинг отрисовки во время жестов пальцем для железных 30-60 FPS */
+function drawOverlay(force){
+  if(!mapOK)return;
+  var now=performance.now();
+  if(!force&&(now-lastDrawTime<32)){
+    if(!raf){
+      raf=requestAnimationFrame(function(){
+        raf=0;
+        lastDrawTime=performance.now();
+        doDraw();
+      });
+    }
+    return;
+  }
+  if(raf){cancelAnimationFrame(raf);raf=0;}
+  lastDrawTime=now;
+  doDraw();
+}
+
+function doDraw(){
+  var sz=sizeCanvases(),w=sz.w,h=sz.h;
+  ctx.clearRect(0,0,w,h);
+  var z=map.getZoom();
+  /* Честный физический масштаб метров на Земле */
+  var mpp=156543.03392*Math.cos(TARAZ_CENTER[0]*Math.PI/180)/Math.pow(2,z);
+  var rPx=Math.max(1.8,S.radius/mpp);
+
+  var active=S.points.filter(function(p){return p.cond!=='gone';});
+  var activePx=[];
+  for(var i=0;i<active.length;i++){
+    var q=map.latLngToContainerPoint([active[i].lat,active[i].lng]);
+    if(q.x>=-rPx*2&&q.y>=-rPx*2&&q.x<=w+rPx*2&&q.y<=h+rPx*2){
+      activePx.push({x:q.x,y:q.y,p:active[i]});
+    }
+  }
+  var cityPx=pxPoly(TARAZ_BORDER);
+  var cvg=getCoverage();
+
+  /* Границы видимости для мгновенного отсечения невидимых районов */
+  var bnds=map.getBounds();
+  var bS=bnds.getSouth(),bN=bnds.getNorth(),bW=bnds.getWest(),bE=bnds.getEast();
+
+  /* 1. Оттенок исследованных районов (только видимые на экране) */
+  ctx.save();tracePath(ctx,cityPx);ctx.clip();
+  TARAZ_DISTRICTS.forEach(function(d,i){
+    var pct=G.tot[i]?cvg.dist[i]/G.tot[i]*100:0;
+    if(pct<=0)return;
+    if(d.bbox.maxLat<bS||d.bbox.minLat>bN||d.bbox.maxLng<bW||d.bbox.minLng>bE)return;
+    tracePath(ctx,pxPoly(d.poly));
+    ctx.fillStyle='rgba(37,255,142,'+(0.04+Math.min(pct,100)*0.0014).toFixed(3)+')';ctx.fill();
+  });
+  ctx.restore();
+
+  /* 2. Туман войны + алгоритм открытия соединенных зон */
+  if(S.showFog){
+    ctx.fillStyle='rgba(5,8,14,0.74)';
+    ctx.fillRect(0,0,w,h);
+
+    /* За чертой Тараза — глубокая тень */
+    ctx.save();ctx.beginPath();ctx.rect(0,0,w,h);
+    for(var i=0;i<cityPx.length;i++){if(i)ctx.lineTo(cityPx[i][0],cityPx[i][1]);else ctx.moveTo(cityPx[i][0],cityPx[i][1]);}
+    ctx.closePath();ctx.fillStyle='rgba(2,4,7,0.50)';ctx.fill('evenodd');ctx.restore();
+
+    if(activePx.length>0&&rPx>=1.8){
+      var corridors=getTerritoryCorridors(rPx,w,h);
+
+      /* 2A. Идеально чистое вырезание тумана (каждая фигура отдельно, 0 багов winding rule) */
+      ctx.save();
+      ctx.globalCompositeOperation='destination-out';
+      ctx.fillStyle='#000';
+      eraseTerritory(ctx,activePx,corridors,rPx);
+      ctx.restore();
+
+      /* 2B. Мягкая изумрудная аура открытой зоны (ложится под туман в открытые окна) */
+      ctx.save();
+      tracePath(ctx,cityPx);
+      ctx.clip();
+      ctx.globalCompositeOperation='destination-over';
+      ctx.fillStyle='rgba(37,255,142,0.09)';
+      ctx.fillRect(0,0,w,h);
+      ctx.restore();
+
+      /* 2C. Наземный тактический маяк в точке каждого стикера на асфальте */
+      ctx.save();
+      for(var i=0;i<activePx.length;i++){
+        var pt=activePx[i];
+        ctx.beginPath();
+        ctx.arc(pt.x,pt.y,Math.min(6,Math.max(3,rPx*0.1)),0,Math.PI*2);
+        ctx.strokeStyle='#25ff8e';
+        ctx.lineWidth=1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(pt.x,pt.y,Math.min(2.5,Math.max(1.5,rPx*0.04)),0,Math.PI*2);
+        ctx.fillStyle='#ffffff';
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }else if(activePx.length>0&&rPx>=1.8){
+    /* Туман выключен: показываем заливку открытой территории без линий */
+    var corridors=getTerritoryCorridors(rPx,w,h);
+    ctx.save();
+    ctx.fillStyle='rgba(37,255,142,0.12)';
+    eraseTerritory(ctx,activePx,corridors,rPx);
+    ctx.restore();
+  }
+
+  /* 3. Чёткие границы районов (только видимые районы) */
+  if(S.showBound){
+    ctx.save();tracePath(ctx,cityPx);ctx.clip();
+    ctx.lineJoin='round';ctx.lineCap='round';
+    TARAZ_DISTRICTS.forEach(function(d,i){
+      if(d.bbox.maxLat<bS||d.bbox.minLat>bN||d.bbox.maxLng<bW||d.bbox.minLng>bE)return;
+      var pts=pxPoly(d.poly),owned=cvg.dist[i]>0;
+      tracePath(ctx,pts);
+      ctx.strokeStyle='rgba(2,5,9,.85)';ctx.lineWidth=3.5;ctx.stroke();
+      ctx.strokeStyle=owned?'rgba(37,255,142,.95)':'rgba(160,185,215,.55)';ctx.lineWidth=1.5;ctx.stroke();
+    });
+    ctx.restore();
+    /* Внешняя граница города с двойным неоновым контуром */
+    ctx.save();tracePath(ctx,cityPx);
+    ctx.strokeStyle='rgba(78,165,255,.25)';ctx.lineWidth=5.5;ctx.lineJoin='round';ctx.stroke();
+    ctx.strokeStyle='#4ea5ff';ctx.lineWidth=2.2;ctx.stroke();
+    ctx.restore();
+  }
+
+  /* 4. Названия районов (GTA) */
+  if(S.showLabels&&z>=12.5){
+    ctx.save();tracePath(ctx,cityPx);ctx.clip();
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    var fs=Math.max(9,Math.min(13,(z-10)*1.8));
+    ctx.font='800 '+fs+'px system-ui,sans-serif';
+    TARAZ_DISTRICTS.forEach(function(d,i){
+      if(d.bbox.maxLat<bS||d.bbox.minLat>bN||d.bbox.maxLng<bW||d.bbox.minLng>bE)return;
+      var q=map.latLngToContainerPoint(d.center);
+      if(q.x<-40||q.y<-20||q.x>w+40||q.y>h+20)return;
+      var owned=cvg.dist[i]>0,t=d.name.toUpperCase();
+      ctx.lineWidth=3;ctx.strokeStyle='rgba(2,5,9,.92)';ctx.strokeText(t,q.x,q.y);
+      ctx.fillStyle=owned?'#c9ffe2':'rgba(215,226,240,.8)';ctx.fillText(t,q.x,q.y);
+    });
+    ctx.restore();
+  }
+}
+
+/* ================= СТАТИСТИКА ================= */
+function renderStats(){
+  var cvg=window.__cov=getCoverage();
+  var total=S.points.length,alive=S.points.filter(function(p){return p.cond!=='gone';}).length,gone=total-alive;
+  var opened=0;cvg.dist.forEach(function(c){if(c>0)opened++;});
+  var lv=levelOf(cvg.pct);
+  $('tPct').textContent=fmtPct(cvg.pct);$('tFlags').textContent=alive;$('tDist').textContent=opened+'/'+TARAZ_DISTRICTS.length;
+  $('sPct').textContent=fmtPct(cvg.pct);$('sLvl').textContent=lv.n;$('sLvl').style.color=lv.c;
+  $('sArea').textContent='Открыто '+km2(cvg.count).toFixed(2)+' из '+km2(G.n).toFixed(0)+' км² города';
+  $('sBar').style.width=Math.max(cvg.count?2:0,Math.min(100,cvg.pct))+'%';
+  $('sAlive').textContent=alive;$('sGone').textContent=gone;$('sStreak').textContent=calcStreak()+' дн.';
+  if(total){var last=Math.max.apply(null,S.points.map(function(p){return p.createdAt;}));var ago=daysAgo(last);$('sLast').textContent=ago===0?'Сегодня':ago+' дн. назад';}
+  else $('sLast').textContent='—';
+  $('empty').style.display=total?'none':'block';
+  var rem=$('remind');
+  if(total){
+    var lastT=Math.max.apply(null,S.points.map(function(p){return p.createdAt;})),ag=daysAgo(lastT);
+    var stale=S.points.filter(function(p){return p.cond!=='gone'&&(ageOf(p)>30||p.cond==='peel');}).length;
+    if(ag>=S.remDays){rem.style.display='block';rem.textContent='😴 Не клеил '+ag+' дн.'+(stale?' · '+stale+' флажк. просят проверки':'');}
+    else if(stale>0&&S.filter==='all'){rem.style.display='block';rem.textContent='🟡 '+stale+' флажк. давно не проверял — туман возвращается';}
+    else rem.style.display='none';
+  }else rem.style.display='none';
+  var box=$('sDistList');box.innerHTML='';
+  var order=TARAZ_DISTRICTS.map(function(d,i){return {d:d,i:i,pct:G.tot[i]?cvg.dist[i]/G.tot[i]*100:0};}).sort(function(a,b){return b.pct-a.pct;});
+  order.forEach(function(o){
+    var l=levelOf(o.pct),row=document.createElement('div');
+    row.className='district-item'+(o.pct>0?' explored':'');
+    row.innerHTML='<div class="d-top"><div class="d-title"></div><div class="d-pct"></div></div><div class="d-sub"></div><div class="d-bar"><i></i></div>';
+    row.querySelector('.d-title').textContent=o.d.name;
+    var pe=row.querySelector('.d-pct');pe.textContent=o.pct>0?fmtPct(o.pct):'0%';if(o.pct<=0)pe.className='d-pct zero';
+    row.querySelector('.d-sub').textContent=l.n+' · '+km2(cvg.dist[o.i]).toFixed(2)+' / '+km2(G.tot[o.i]).toFixed(2)+' км²';
+    row.querySelector('.d-bar i').style.width=Math.min(100,o.pct)+'%';
+    row.onclick=function(){closeAll();if(mapOK){map.setView(o.d.center,15);showHud(o.d,o.i,cvg,null);}};
+    box.appendChild(row);
+  });
+}
+function renderList(){
+  var q=(($('q')&&$('q').value)||'').toLowerCase().trim(),box=$('list');box.innerHTML='';
+  var arr=S.points.slice().sort(function(a,b){return b.createdAt-a.createdAt;}).filter(function(p){return !q||((p.note||'')+' '+(p.district||'')).toLowerCase().indexOf(q)>=0;});
+  $('lCount').textContent='· '+arr.length;
+  if(!arr.length){box.innerHTML='<div class="mut" style="padding:14px 0;text-align:center">Флажков нет</div>';return;}
+  var frag=document.createDocumentFragment();
+  arr.slice(0,200).forEach(function(p){
+    var d=document.createElement('div');d.className='item';
+    d.innerHTML='<div class="fm"></div><div class="n"><b></b><span></span></div>';
+    d.querySelector('.fm').textContent=p.cond==='fire'?'🔥':(p.cond==='ok'?'👌':(p.cond==='peel'?'🩹':'💀'));
+    d.querySelector('b').textContent=p.note||p.district||'Флажок';
+    d.querySelector('span').textContent=(p.district||'Тараз')+' · '+fmtD(p.createdAt);
+    var b=document.createElement('button');b.type='button';b.textContent='Показать →';
+    b.onclick=function(){closeAll();if(mapOK)map.setView([p.lat,p.lng],17);openPoint(p.id);};
+    d.appendChild(b);frag.appendChild(d);
+  });
+  box.appendChild(frag);
+}
+$('q').oninput=renderList;
+function renderAll(){
+  renderStats();renderFlags();drawOverlay();
+  if($('listSheet').classList.contains('show'))renderList();
+}
+
+/* ================= КАРТА ================= */
+function initMap(){
+  try{
+    if(typeof L==='undefined')throw new Error('no L');
+    /* с плавной аппаратной анимацией зума */
+    map=L.map('map',{zoomControl:false,attributionControl:false,preferCanvas:true,zoomAnimation:true,markerZoomAnimation:true,zoomSnap:0.25,zoomDelta:0.5,wheelPxPerZoomLevel:120}).setView(TARAZ_CENTER,13);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,maxNativeZoom:16,updateWhenIdle:true,updateWhenZooming:false,keepBuffer:1}).addTo(map);
+    flagsLayer=L.layerGroup().addTo(map);
+    mapOK=true;
+    map.on('click',function(e){
+      if(addMode){addPoint(e.latlng.lat,e.latlng.lng);return;}
+      var d=districtAt(e.latlng.lat,e.latlng.lng);
+      if(!d){hideHud();return;}
+      var i=TARAZ_DISTRICTS.indexOf(d);
+      showHud(d,i,getCoverage(),e.latlng);vib(15);
+    });
+    map.on('contextmenu',function(e){addPoint(e.latlng.lat,e.latlng.lng);});
+    map.on('move',function(){drawOverlay(false);});
+    map.on('zoom moveend zoomend viewreset resize',function(){drawOverlay(true);});
+    window.addEventListener('resize',drawOverlay);
+    if(S.points.length){try{map.fitBounds(L.latLngBounds(S.points.map(function(p){return [p.lat,p.lng];})).pad(.3),{maxZoom:16});}catch(e){}}
+    else map.fitBounds(L.latLngBounds(TARAZ_BORDER),{padding:[20,20]});
+    setTimeout(function(){try{map.invalidateSize();drawOverlay();}catch(e){}},300);
+  }catch(e){mapOK=false;$('mapHint').style.display='block';}
+}
+initMap();
+renderAll();
+if(S.points.length===0){getPos().then(function(r){if(mapOK&&districtAt(r.ll[0],r.ll[1])){map.setView(r.ll,15);setMe(r.ll);}}).catch(function(){});}
+setInterval(function(){if(!$('pointSheet').classList.contains('show')&&!$('setSheet').classList.contains('show'))renderAll();},60000);
+})();
+</script>
+</body>
+</html>

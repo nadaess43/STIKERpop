@@ -1,0 +1,8 @@
+{
+  "appId": "com.swiftsoft.stikerpop",
+  "appName": "STIKERpop",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
