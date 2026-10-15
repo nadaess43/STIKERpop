@@ -96,7 +96,8 @@ button{font-family:inherit;cursor:pointer}
 .mini-stat b{display:block;font-size:18px;font-weight:900}
 .mini-stat span{font-size:12px;color:var(--mut)}
 .district-item{padding:11px 14px;background:var(--card2);border:1px solid var(--line);border-radius:14px;margin-bottom:8px;cursor:pointer}
-.district-item.explored{border-color:rgba(37,255,142,.4);background:linear-gradient(90deg,#0a1d13,#0b141d)}
+.district-item.explored{border-color:rgba(78,165,255,.4);background:linear-gradient(90deg,#0c1726,#0b141d)}
+.district-item.conq{border-color:var(--acc);background:linear-gradient(90deg,rgba(37,255,142,.18),rgba(15,28,20,.95));box-shadow:0 0 16px rgba(37,255,142,.2)}
 .d-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .d-title{font-size:14px;font-weight:800}
 .d-pct{font-size:15px;font-weight:900;color:var(--acc)}
@@ -383,9 +384,12 @@ var G={};
 })();
 function coverage(radius){
   var cov=new Uint8Array(G.n),cnt=0,dc=new Array(TARAZ_DISTRICTS.length).fill(0);
+  var distStickers=new Array(TARAZ_DISTRICTS.length).fill(0);
   var rc=Math.ceil(radius/STEP),r2=(radius/STEP)*(radius/STEP);
   S.points.forEach(function(p){
     if(p.cond==='gone')return;
+    var dIdx=districtIndexAt(p.lat,p.lng);
+    if(dIdx>=0&&dIdx<distStickers.length)distStickers[dIdx]++;
     var c0=Math.floor((p.lng-G.minLng)/G.dLng),r0=Math.floor((p.lat-G.minLat)/G.dLat);
     for(var dr=-rc;dr<=rc;dr++){var r=r0+dr;if(r<0||r>=G.rows)continue;
       for(var dcI=-rc;dcI<=rc;dcI++){var c=c0+dcI;if(c<0||c>=G.cols)continue;
@@ -394,37 +398,31 @@ function coverage(radius){
         cov[k]=1;cnt++;dc[G.dist[k]]++;
       }}
   });
-  return {count:cnt,pct:cnt/G.n*100,dist:dc};
+
+  /* ЗАХВАТ РАЙОНА (GTA GANG WARS):
+     3+ стикера или >=25% покрытия = район полностью переходит под контроль (100%) */
+  var conquered=new Array(TARAZ_DISTRICTS.length).fill(false);
+  for(var i=0;i<TARAZ_DISTRICTS.length;i++){
+    var isConq=distStickers[i]>=3||(G.tot[i]>0&&(dc[i]/G.tot[i])>=0.25);
+    if(isConq){
+      conquered[i]=true;
+    }
+  }
+
+  /* Все ячейки захваченных районов засчитываются в общий процент открытого города */
+  for(var k=0;k<G.n;k++){
+    var di=G.dist[k];
+    if(conquered[di]&&!cov[k]){
+      cov[k]=1;cnt++;dc[di]++;
+    }
+  }
+
+  return {count:cnt,pct:cnt/G.n*100,dist:dc,conquered:conquered,distStickers:distStickers};
 }
 var cachedCov=null,cachedPairs=null;
 function getCoverage(){
   if(!cachedCov)cachedCov=coverage(S.radius);
   return cachedCov;
-}
-function getConnectedPairs(){
-  if(cachedPairs)return cachedPairs;
-  var active=S.points.filter(function(p){return p.cond!=='gone';});
-  var pairs=[];
-  var thresholdM=S.radius*2.2;
-  var dLatMax=thresholdM/111320;
-  var dLngMax=thresholdM/(111320*0.732);
-  for(var i=0;i<active.length;i++){
-    var p1=active[i],neighbors=[];
-    for(var j=0;j<active.length;j++){
-      if(i===j)continue;
-      var p2=active[j];
-      if(Math.abs(p1.lat-p2.lat)>dLatMax||Math.abs(p1.lng-p2.lng)>dLngMax)continue;
-      var d=distM(p1.lat,p1.lng,p2.lat,p2.lng);
-      if(d<=thresholdM)neighbors.push({idx:j,d:d,p:p2});
-    }
-    neighbors.sort(function(a,b){return a.d-b.d;});
-    var kMax=Math.min(neighbors.length,2);
-    for(var k=0;k<kMax;k++){
-      var j=neighbors[k].idx;
-      if(i<j)pairs.push([p1,neighbors[k].p]);
-    }
-  }
-  return (cachedPairs=pairs);
 }
 function invalidateCoverage(){
   cachedCov=null;
@@ -432,13 +430,13 @@ function invalidateCoverage(){
   window.__cov=null;
 }
 function km2(n){return n*STEP*STEP/1e6;}
-function levelOf(p){
+function levelOf(p,isConq){
+  if(isConq||p>=100)return {n:'👑 ЗАХВАЧЕН',c:'#25ff8e'};
   if(p<=0)return {n:'Скрыт в тумане',c:'#8596aa'};
-  if(p<3)return {n:'Разведка',c:'#8cc8ff'};
-  if(p<20)return {n:'Влияние',c:'#4ea5ff'};
-  if(p<50)return {n:'Контроль',c:'#ffd043'};
-  if(p<85)return {n:'Доминирование',c:'#ff8b3d'};
-  return {n:'👑 Цитадель',c:'#25ff8e'};
+  if(p<10)return {n:'Разведка',c:'#8cc8ff'};
+  if(p<40)return {n:'Влияние',c:'#4ea5ff'};
+  if(p<75)return {n:'Осада',c:'#ffd043'};
+  return {n:'👑 ЗАХВАЧЕН',c:'#25ff8e'};
 }
 function fmtPct(p){return p<0.1?p.toFixed(2)+'%':(p<10?p.toFixed(1)+'%':Math.round(p)+'%');}
 
@@ -655,12 +653,13 @@ $('pDel').onclick=function(){
 /* HUD района */
 function showHud(d,i,cv,tapLL){
   cv=cv||getCoverage();
-  var dc=cv.dist[i],tot=G.tot[i],pct=tot?dc/tot*100:0,lv=levelOf(pct);
-  var flags=S.points.filter(function(p){return p.cond!=='gone'&&p.districtId===d.id;}).length;
-  $('hudName').textContent=d.name;
-  $('hudLvl').textContent=lv.n+(pct>0?' · '+fmtPct(pct):'');$('hudLvl').style.color=lv.c;
+  var isConq=cv.conquered[i];
+  var dc=cv.dist[i],tot=G.tot[i],pct=isConq?100:(tot?dc/tot*100:0),lv=levelOf(pct,isConq);
+  var flags=cv.distStickers[i]||0;
+  $('hudName').textContent=(isConq?'👑 ':'')+d.name;
+  $('hudLvl').textContent=lv.n+(isConq?' (ПОЛНЫЙ КОНТРОЛЬ)':' · '+fmtPct(pct));$('hudLvl').style.color=lv.c;
   $('hudBar').style.width=Math.max(pct>0?4:0,Math.min(100,pct))+'%';
-  $('hudInfo').textContent='Открыто '+km2(dc).toFixed(2)+' из '+km2(tot).toFixed(2)+' км² · флажков: '+flags;
+  $('hudInfo').textContent=(isConq?'Район полностью под контролем банды 🔥 · ':'')+'Флажков в районе: '+flags+(isConq?'':' (нужно 3 для захвата)');
   var add=$('hudAdd');
   if(tapLL){add.style.display='block';add.onclick=function(){addPoint(tapLL.lat,tapLL.lng);hideHud();};}else add.style.display='none';
   $('districtHud').classList.add('show');
@@ -718,50 +717,64 @@ function sizeCanvases(){
 function pxPoly(poly){return poly.map(function(p){var q=map.latLngToContainerPoint(p);return [q.x,q.y];});}
 function tracePath(c,pts){c.beginPath();for(var i=0;i<pts.length;i++){if(i)c.lineTo(pts[i][0],pts[i][1]);else c.moveTo(pts[i][0],pts[i][1]);}c.closePath();}
 
-/* БЫСТРОЕ ПОСТРОЕНИЕ КОРИДОРОВ ИЗ ПРЕДРАССЧИТАННЫХ ПАР */
-function getTerritoryCorridors(rPx,w,h){
-  var corridors=[];
-  var pairs=getConnectedPairs();
-  var wHalf=rPx*0.88;
-  for(var k=0;k<pairs.length;k++){
-    var p1=pairs[k][0],p2=pairs[k][1];
-    var q1=map.latLngToContainerPoint([p1.lat,p1.lng]);
-    var q2=map.latLngToContainerPoint([p2.lat,p2.lng]);
-    if((q1.x<-rPx*2&&q2.x<-rPx*2)||(q1.x>w+rPx*2&&q2.x>w+rPx*2)||
-       (q1.y<-rPx*2&&q2.y<-rPx*2)||(q1.y>h+rPx*2&&q2.y>h+rPx*2))continue;
-    var dx=q2.x-q1.x,dy=q2.y-q1.y;
-    var dPx=Math.sqrt(dx*dx+dy*dy);
-    if(dPx>0.5){
-      var nx=-dy/dPx,ny=dx/dPx;
-      corridors.push([
-        {x:q1.x+nx*wHalf,y:q1.y+ny*wHalf},
-        {x:q2.x+nx*wHalf,y:q2.y+ny*wHalf},
-        {x:q2.x-nx*wHalf,y:q2.y-ny*wHalf},
-        {x:q1.x-nx*wHalf,y:q1.y-ny*wHalf}
-      ]);
+/* ВЫПУКЛАЯ ОБОЛОЧКА (Monotone Chain algorithm): монолитный полигональный захват территории */
+function crossProduct(o,a,b){
+  return (a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x);
+}
+function getConvexHull(pts){
+  if(pts.length<=2)return pts.slice();
+  var p=pts.slice().sort(function(a,b){return a.x===b.x?a.y-b.y:a.x-b.x;});
+  var lower=[];
+  for(var i=0;i<p.length;i++){
+    while(lower.length>=2&&crossProduct(lower[lower.length-2],lower[lower.length-1],p[i])<=0){
+      lower.pop();
     }
+    lower.push(p[i]);
   }
-  return corridors;
+  var upper=[];
+  for(var i=p.length-1;i>=0;i--){
+    while(upper.length>=2&&crossProduct(upper[upper.length-2],upper[upper.length-1],p[i])<=0){
+      upper.pop();
+    }
+    upper.push(p[i]);
+  }
+  lower.pop();upper.pop();
+  return lower.concat(upper);
 }
 
-/* ЗАЛИВКА КАЖДОЙ ФИГУРЫ ОТДЕЛЬНО: исключает баги winding rule и черные полумесяцы */
-function eraseTerritory(c,activePx,corridors,rPx){
-  for(var i=0;i<activePx.length;i++){
-    var pt=activePx[i];
-    c.beginPath();
-    c.arc(pt.x,pt.y,rPx,0,Math.PI*2);
-    c.fill();
+/* ГЛАДКАЯ ЗОНА ПРИСУТСТВИЯ (БЕЗ УРОДЛИВЫХ КРУГЛЯШКОВ) */
+function drawSmoothTurf(c,pts,rPx){
+  if(!pts||!pts.length)return;
+  if(pts.length===1){
+    c.beginPath();c.arc(pts[0].x,pts[0].y,rPx,0,Math.PI*2);c.fill();
+    return;
   }
-  for(var k=0;k<corridors.length;k++){
-    var q=corridors[k];
+  if(pts.length===2){
+    var p1=pts[0],p2=pts[1];
+    var dx=p2.x-p1.x,dy=p2.y-p1.y,d=Math.sqrt(dx*dx+dy*dy);
+    if(d<0.5){
+      c.beginPath();c.arc(p1.x,p1.y,rPx,0,Math.PI*2);c.fill();
+      return;
+    }
+    var nx=-dy/d*rPx,ny=dx/d*rPx;
     c.beginPath();
-    c.moveTo(q[0].x,q[0].y);
-    c.lineTo(q[1].x,q[1].y);
-    c.lineTo(q[2].x,q[2].y);
-    c.lineTo(q[3].x,q[3].y);
-    c.closePath();
-    c.fill();
+    c.arc(p1.x,p1.y,rPx,Math.atan2(-ny,-nx),Math.atan2(ny,nx));
+    c.arc(p2.x,p2.y,rPx,Math.atan2(ny,nx),Math.atan2(-ny,-nx));
+    c.closePath();c.fill();
+    return;
   }
+  var hull=getConvexHull(pts);
+  c.beginPath();
+  for(var i=0;i<hull.length;i++){
+    if(i===0)c.moveTo(hull[i].x,hull[i].y);
+    else c.lineTo(hull[i].x,hull[i].y);
+  }
+  c.closePath();
+  c.fill();
+  c.lineWidth=rPx*1.8;
+  c.lineJoin='round';
+  c.lineCap='round';
+  c.stroke();
 }
 
 /* Троттлинг отрисовки во время жестов пальцем для железных 30-60 FPS */
@@ -787,39 +800,38 @@ function doDraw(){
   var sz=sizeCanvases(),w=sz.w,h=sz.h;
   ctx.clearRect(0,0,w,h);
   var z=map.getZoom();
-  /* Честный физический масштаб метров на Земле */
   var mpp=156543.03392*Math.cos(TARAZ_CENTER[0]*Math.PI/180)/Math.pow(2,z);
   var rPx=Math.max(1.8,S.radius/mpp);
 
   var active=S.points.filter(function(p){return p.cond!=='gone';});
   var activePx=[];
+  var ptsByDist=new Array(TARAZ_DISTRICTS.length);
+  for(var dI=0;dI<TARAZ_DISTRICTS.length;dI++)ptsByDist[dI]=[];
+  var outsidePts=[];
+
   for(var i=0;i<active.length;i++){
     var q=map.latLngToContainerPoint([active[i].lat,active[i].lng]);
+    var ptObj={x:q.x,y:q.y,p:active[i]};
     if(q.x>=-rPx*2&&q.y>=-rPx*2&&q.x<=w+rPx*2&&q.y<=h+rPx*2){
-      activePx.push({x:q.x,y:q.y,p:active[i]});
+      activePx.push(ptObj);
+    }
+    var dIdx=districtIndexAt(active[i].lat,active[i].lng);
+    if(dIdx>=0&&dIdx<TARAZ_DISTRICTS.length){
+      ptsByDist[dIdx].push(ptObj);
+    }else{
+      outsidePts.push(ptObj);
     }
   }
+
   var cityPx=pxPoly(TARAZ_BORDER);
   var cvg=getCoverage();
 
-  /* Границы видимости для мгновенного отсечения невидимых районов */
   var bnds=map.getBounds();
   var bS=bnds.getSouth(),bN=bnds.getNorth(),bW=bnds.getWest(),bE=bnds.getEast();
 
-  /* 1. Оттенок исследованных районов (только видимые на экране) */
-  ctx.save();tracePath(ctx,cityPx);ctx.clip();
-  TARAZ_DISTRICTS.forEach(function(d,i){
-    var pct=G.tot[i]?cvg.dist[i]/G.tot[i]*100:0;
-    if(pct<=0)return;
-    if(d.bbox.maxLat<bS||d.bbox.minLat>bN||d.bbox.maxLng<bW||d.bbox.minLng>bE)return;
-    tracePath(ctx,pxPoly(d.poly));
-    ctx.fillStyle='rgba(37,255,142,'+(0.04+Math.min(pct,100)*0.0014).toFixed(3)+')';ctx.fill();
-  });
-  ctx.restore();
-
-  /* 2. Туман войны + алгоритм открытия соединенных зон */
+  /* 2. Туман войны + Алгоритм захвата районов (GTA 5 Style) */
   if(S.showFog){
-    ctx.fillStyle='rgba(5,8,14,0.74)';
+    ctx.fillStyle='rgba(5,8,14,0.76)';
     ctx.fillRect(0,0,w,h);
 
     /* За чертой Тараза — глубокая тень */
@@ -827,82 +839,136 @@ function doDraw(){
     for(var i=0;i<cityPx.length;i++){if(i)ctx.lineTo(cityPx[i][0],cityPx[i][1]);else ctx.moveTo(cityPx[i][0],cityPx[i][1]);}
     ctx.closePath();ctx.fillStyle='rgba(2,4,7,0.50)';ctx.fill('evenodd');ctx.restore();
 
-    if(activePx.length>0&&rPx>=1.8){
-      var corridors=getTerritoryCorridors(rPx,w,h);
-
-      /* 2A. Идеально чистое вырезание тумана (каждая фигура отдельно, 0 багов winding rule) */
-      ctx.save();
-      ctx.globalCompositeOperation='destination-out';
-      ctx.fillStyle='#000';
-      eraseTerritory(ctx,activePx,corridors,rPx);
-      ctx.restore();
-
-      /* 2B. Мягкая изумрудная аура открытой зоны (ложится под туман в открытые окна) */
-      ctx.save();
-      tracePath(ctx,cityPx);
-      ctx.clip();
-      ctx.globalCompositeOperation='destination-over';
-      ctx.fillStyle='rgba(37,255,142,0.09)';
-      ctx.fillRect(0,0,w,h);
-      ctx.restore();
-
-      /* 2C. Наземный тактический маяк в точке каждого стикера на асфальте */
-      ctx.save();
-      for(var i=0;i<activePx.length;i++){
-        var pt=activePx[i];
-        ctx.beginPath();
-        ctx.arc(pt.x,pt.y,Math.min(6,Math.max(3,rPx*0.1)),0,Math.PI*2);
-        ctx.strokeStyle='#25ff8e';
-        ctx.lineWidth=1.5;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(pt.x,pt.y,Math.min(2.5,Math.max(1.5,rPx*0.04)),0,Math.PI*2);
-        ctx.fillStyle='#ffffff';
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-  }else if(activePx.length>0&&rPx>=1.8){
-    /* Туман выключен: показываем заливку открытой территории без линий */
-    var corridors=getTerritoryCorridors(rPx,w,h);
+    /* 2A. ВЫРЕЗАНИЕ ТЕРРИТОРИИ ИЗ ТУМАНА (destination-out) */
     ctx.save();
-    ctx.fillStyle='rgba(37,255,142,0.12)';
-    eraseTerritory(ctx,activePx,corridors,rPx);
+    ctx.globalCompositeOperation='destination-out';
+    ctx.fillStyle='#000';
+    ctx.strokeStyle='#000';
+
+    // 1. Полностью захваченные районы (3+ стикера): освобождаются ЦЕЛИКОМ по границам района!
+    TARAZ_DISTRICTS.forEach(function(d,i){
+      if(!cvg.conquered[i])return;
+      if(d.bbox.maxLat<bS||d.bbox.minLat>bN||d.bbox.maxLng<bW||d.bbox.minLng>bE)return;
+      var dPx=pxPoly(d.poly);
+      ctx.beginPath();
+      tracePath(ctx,dPx);
+      ctx.fill();
+    });
+
+    // 2. Районы в процессе захвата (1-2 стикера): гладкий плацдарм, обрезанный по району!
+    TARAZ_DISTRICTS.forEach(function(d,i){
+      if(cvg.conquered[i])return;
+      var dPts=ptsByDist[i];
+      if(!dPts||!dPts.length)return;
+      if(d.bbox.maxLat<bS||d.bbox.minLat>bN||d.bbox.maxLng<bW||d.bbox.minLng>bE)return;
+      var dPx=pxPoly(d.poly);
+      ctx.save();
+      ctx.beginPath();
+      tracePath(ctx,dPx);
+      ctx.clip(); // Обрезаем строго по контуру района!
+      drawSmoothTurf(ctx,dPts,rPx);
+      ctx.restore();
+    });
+
+    // 3. Стикеры вне границ районов
+    if(outsidePts.length>0){
+      drawSmoothTurf(ctx,outsidePts,rPx);
+    }
+    ctx.restore();
+
+    /* 2B. МЯГКАЯ ИЗУМРУДНАЯ АУРА ЗАХВАЧЕННОЙ ТЕРРИТОРИИ (destination-over) */
+    ctx.save();
+    tracePath(ctx,cityPx);
+    ctx.clip();
+    ctx.globalCompositeOperation='destination-over';
+    ctx.fillStyle='rgba(37,255,142,0.11)';
+    ctx.fillRect(0,0,w,h);
+    ctx.restore();
+
+    /* 2C. Наземные тактические маяки в центрах стикеров */
+    ctx.save();
+    for(var i=0;i<activePx.length;i++){
+      var pt=activePx[i];
+      ctx.beginPath();
+      ctx.arc(pt.x,pt.y,Math.min(6,Math.max(3,rPx*0.1)),0,Math.PI*2);
+      ctx.strokeStyle='#25ff8e';
+      ctx.lineWidth=1.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(pt.x,pt.y,Math.min(2.5,Math.max(1.5,rPx*0.04)),0,Math.PI*2);
+      ctx.fillStyle='#ffffff';
+      ctx.fill();
+    }
+    ctx.restore();
+
+  } else {
+    /* Туман выключен: подсвечиваем захваченные районы и зоны присутствия */
+    ctx.save();
+    ctx.fillStyle='rgba(37,255,142,0.14)';
+    TARAZ_DISTRICTS.forEach(function(d,i){
+      if(!cvg.conquered[i])return;
+      if(d.bbox.maxLat<bS||d.bbox.minLat>bN||d.bbox.maxLng<bW||d.bbox.minLng>bE)return;
+      tracePath(ctx,pxPoly(d.poly));
+      ctx.fill();
+    });
+    TARAZ_DISTRICTS.forEach(function(d,i){
+      if(cvg.conquered[i])return;
+      var dPts=ptsByDist[i];
+      if(!dPts||!dPts.length)return;
+      ctx.save();
+      tracePath(ctx,pxPoly(d.poly));
+      ctx.clip();
+      drawSmoothTurf(ctx,dPts,rPx);
+      ctx.restore();
+    });
     ctx.restore();
   }
 
-  /* 3. Чёткие границы районов (только видимые районы) */
+  /* 3. Чёткие границы районов (GTA 5 Gang Territory Lines) */
   if(S.showBound){
     ctx.save();tracePath(ctx,cityPx);ctx.clip();
     ctx.lineJoin='round';ctx.lineCap='round';
     TARAZ_DISTRICTS.forEach(function(d,i){
       if(d.bbox.maxLat<bS||d.bbox.minLat>bN||d.bbox.maxLng<bW||d.bbox.minLng>bE)return;
-      var pts=pxPoly(d.poly),owned=cvg.dist[i]>0;
+      var pts=pxPoly(d.poly);
+      var isConq=cvg.conquered[i];
+      var hasPts=cvg.distStickers[i]>0;
       tracePath(ctx,pts);
-      ctx.strokeStyle='rgba(2,5,9,.85)';ctx.lineWidth=3.5;ctx.stroke();
-      ctx.strokeStyle=owned?'rgba(37,255,142,.95)':'rgba(160,185,215,.55)';ctx.lineWidth=1.5;ctx.stroke();
+      if(isConq){
+        ctx.strokeStyle='rgba(37,255,142,.35)';ctx.lineWidth=6;ctx.stroke();
+        ctx.strokeStyle='#25ff8e';ctx.lineWidth=2.5;ctx.stroke();
+      }else if(hasPts){
+        ctx.strokeStyle='rgba(78,165,255,.3)';ctx.lineWidth=4;ctx.stroke();
+        ctx.strokeStyle='#4ea5ff';ctx.lineWidth=1.8;ctx.stroke();
+      }else{
+        ctx.strokeStyle='rgba(2,5,9,.85)';ctx.lineWidth=2.5;ctx.stroke();
+        ctx.strokeStyle='rgba(140,165,195,.35)';ctx.lineWidth=1.2;ctx.stroke();
+      }
     });
     ctx.restore();
-    /* Внешняя граница города с двойным неоновым контуром */
+
+    /* Внешняя граница города */
     ctx.save();tracePath(ctx,cityPx);
     ctx.strokeStyle='rgba(78,165,255,.25)';ctx.lineWidth=5.5;ctx.lineJoin='round';ctx.stroke();
     ctx.strokeStyle='#4ea5ff';ctx.lineWidth=2.2;ctx.stroke();
     ctx.restore();
   }
 
-  /* 4. Названия районов (GTA) */
+  /* 4. Названия районов (GTA Map Labels) */
   if(S.showLabels&&z>=12.5){
     ctx.save();tracePath(ctx,cityPx);ctx.clip();
     ctx.textAlign='center';ctx.textBaseline='middle';
     var fs=Math.max(9,Math.min(13,(z-10)*1.8));
-    ctx.font='800 '+fs+'px system-ui,sans-serif';
+    ctx.font='900 '+fs+'px system-ui,sans-serif';
     TARAZ_DISTRICTS.forEach(function(d,i){
       if(d.bbox.maxLat<bS||d.bbox.minLat>bN||d.bbox.maxLng<bW||d.bbox.minLng>bE)return;
       var q=map.latLngToContainerPoint(d.center);
       if(q.x<-40||q.y<-20||q.x>w+40||q.y>h+20)return;
-      var owned=cvg.dist[i]>0,t=d.name.toUpperCase();
-      ctx.lineWidth=3;ctx.strokeStyle='rgba(2,5,9,.92)';ctx.strokeText(t,q.x,q.y);
-      ctx.fillStyle=owned?'#c9ffe2':'rgba(215,226,240,.8)';ctx.fillText(t,q.x,q.y);
+      var isConq=cvg.conquered[i];
+      var t=isConq?('👑 '+d.name.toUpperCase()):d.name.toUpperCase();
+      ctx.lineWidth=3.5;ctx.strokeStyle='rgba(2,5,9,.95)';ctx.strokeText(t,q.x,q.y);
+      ctx.fillStyle=isConq?'#25ff8e':(cvg.distStickers[i]>0?'#8cc8ff':'rgba(215,226,240,.75)');
+      ctx.fillText(t,q.x,q.y);
     });
     ctx.restore();
   }
@@ -912,11 +978,18 @@ function doDraw(){
 function renderStats(){
   var cvg=window.__cov=getCoverage();
   var total=S.points.length,alive=S.points.filter(function(p){return p.cond!=='gone';}).length,gone=total-alive;
-  var opened=0;cvg.dist.forEach(function(c){if(c>0)opened++;});
-  var lv=levelOf(cvg.pct);
-  $('tPct').textContent=fmtPct(cvg.pct);$('tFlags').textContent=alive;$('tDist').textContent=opened+'/'+TARAZ_DISTRICTS.length;
-  $('sPct').textContent=fmtPct(cvg.pct);$('sLvl').textContent=lv.n;$('sLvl').style.color=lv.c;
-  $('sArea').textContent='Открыто '+km2(cvg.count).toFixed(2)+' из '+km2(G.n).toFixed(0)+' км² города';
+  var conqCount=0,activeDistCount=0;
+  TARAZ_DISTRICTS.forEach(function(d,i){
+    if(cvg.conquered[i])conqCount++;
+    if(cvg.distStickers[i]>0)activeDistCount++;
+  });
+  var lv=levelOf(cvg.pct,conqCount>0);
+  $('tPct').textContent=fmtPct(cvg.pct);
+  $('tFlags').textContent=alive;
+  $('tDist').textContent=conqCount+'/'+TARAZ_DISTRICTS.length;
+  $('sPct').textContent=fmtPct(cvg.pct);
+  $('sLvl').textContent=lv.n;$('sLvl').style.color=lv.c;
+  $('sArea').textContent='Открыто '+km2(cvg.count).toFixed(2)+' из '+km2(G.n).toFixed(0)+' км² города ('+conqCount+' районов захвачено)';
   $('sBar').style.width=Math.max(cvg.count?2:0,Math.min(100,cvg.pct))+'%';
   $('sAlive').textContent=alive;$('sGone').textContent=gone;$('sStreak').textContent=calcStreak()+' дн.';
   if(total){var last=Math.max.apply(null,S.points.map(function(p){return p.createdAt;}));var ago=daysAgo(last);$('sLast').textContent=ago===0?'Сегодня':ago+' дн. назад';}
@@ -933,13 +1006,17 @@ function renderStats(){
   var box=$('sDistList');box.innerHTML='';
   var order=TARAZ_DISTRICTS.map(function(d,i){return {d:d,i:i,pct:G.tot[i]?cvg.dist[i]/G.tot[i]*100:0};}).sort(function(a,b){return b.pct-a.pct;});
   order.forEach(function(o){
-    var l=levelOf(o.pct),row=document.createElement('div');
-    row.className='district-item'+(o.pct>0?' explored':'');
+    var isConq=cvg.conquered[o.i];
+    var l=levelOf(o.pct,isConq);
+    var row=document.createElement('div');
+    row.className='district-item'+(isConq?' explored conq':(o.pct>0?' explored':''));
     row.innerHTML='<div class="d-top"><div class="d-title"></div><div class="d-pct"></div></div><div class="d-sub"></div><div class="d-bar"><i></i></div>';
-    row.querySelector('.d-title').textContent=o.d.name;
-    var pe=row.querySelector('.d-pct');pe.textContent=o.pct>0?fmtPct(o.pct):'0%';if(o.pct<=0)pe.className='d-pct zero';
-    row.querySelector('.d-sub').textContent=l.n+' · '+km2(cvg.dist[o.i]).toFixed(2)+' / '+km2(G.tot[o.i]).toFixed(2)+' км²';
-    row.querySelector('.d-bar i').style.width=Math.min(100,o.pct)+'%';
+    row.querySelector('.d-title').textContent=(isConq?'👑 ':'')+o.d.name;
+    var pe=row.querySelector('.d-pct');
+    pe.textContent=isConq?'100%':(o.pct>0?fmtPct(o.pct):'0%');
+    if(!isConq&&o.pct<=0)pe.className='d-pct zero';
+    row.querySelector('.d-sub').textContent=l.n+' · '+(cvg.distStickers[o.i]||0)+' флажк.'+(isConq?' (ПОЛНЫЙ КОНТРОЛЬ)':'');
+    row.querySelector('.d-bar i').style.width=(isConq?100:Math.min(100,o.pct))+'%';
     row.onclick=function(){closeAll();if(mapOK){map.setView(o.d.center,15);showHud(o.d,o.i,cvg,null);}};
     box.appendChild(row);
   });
