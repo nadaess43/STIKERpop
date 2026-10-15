@@ -266,6 +266,7 @@ label{font-size:13px;color:var(--mut);margin-top:14px;display:block;font-weight:
   <div class="toggle"><span>🔤 Названия районов</span><input type="checkbox" id="showLabels"></div>
   <div class="toggle"><span>📳 Вибрация</span><input type="checkbox" id="vibro"></div>
   <button class="big save" id="setSave" type="button">Сохранить</button>
+  <button class="big danger" id="fullResetBtn" type="button" style="margin-top:22px">💣 Полный сброс (5 подтверждений)</button>
 </div>
 
 <div id="onb"><div class="in">
@@ -690,11 +691,60 @@ $('impFile').onchange=function(e){
   }catch(err){toast('Не прочитал файл');}};
   r.readAsText(f);e.target.value='';
 };
-$('wipeBtn').onclick=function(){
-  if(!confirm('Стереть ВСЕ флажки?'))return;
-  var bak=S.points;S.points=[];save();invalidateCoverage();closeAll();renderAll();
-  toast('Всё стёрто','Вернуть',function(){S.points=bak;save();invalidateCoverage();renderAll();});
-};
+function executeFullReset(){
+  var steps=[
+    {
+      t:'⚠️ ПОДТВЕРЖДЕНИЕ 1 из 5',
+      m:'Ты точно хочешь начать ПОЛНЫЙ СБРОС всех данных приложения STIKERpop?'
+    },
+    {
+      t:'⚠️ ПОДТВЕРЖДЕНИЕ 2 из 5',
+      m:'Это удалит все твои флажки ('+S.points.length+' шт.), заметки и весь захват районов. Продолжить?'
+    },
+    {
+      t:'⚠️ ПОДТВЕРЖДЕНИЕ 3 из 5',
+      m:'Весь город Тараз снова будет закрыт туманом войны на 100%. Ты абсолютно уверен?'
+    },
+    {
+      t:'🚨 ПОДТВЕРЖДЕНИЕ 4 из 5 (ОПАСНО)',
+      m:'Внимание! Восстановить данные будет НЕВОЗМОЖНО (если ты не делал экспорт бэкапа в файл). Идём дальше?'
+    },
+    {
+      t:'💥 ФИНАЛЬНОЕ ПОДТВЕРЖДЕНИЕ 5 из 5',
+      m:'ПОСЛЕДНИЙ ШАГ! Нажми «ОК» для полного удаления всех данных приложения навсегда!'
+    }
+  ];
+
+  for(var i=0;i<steps.length;i++){
+    vib(30+i*20);
+    var ok=window.confirm(steps[i].t+'\n\n'+steps[i].m);
+    if(!ok){
+      vib(15);
+      toast('Сброс отменён на шаге '+(i+1)+' из 5 👍');
+      return;
+    }
+  }
+
+  var bak=S.points.slice();
+  S.points=[];
+  S.radius=120;
+  S.showFog=true;
+  S.filter='all';
+  save();
+  invalidateCoverage();
+  closeAll();
+  renderAll();
+  vib([80,40,80,40,150]);
+  toast('💥 Все данные и флажки полностью стёрты','Вернуть',function(){
+    S.points=bak;
+    save();
+    invalidateCoverage();
+    renderAll();
+    toast('Все флажки восстановлены!');
+  });
+}
+$('wipeBtn').onclick=executeFullReset;
+if($('fullResetBtn')) $('fullResetBtn').onclick=executeFullReset;
 function finishOnb(){S.seen=true;save();$('onb').classList.remove('show');}
 if(!S.seen)$('onb').classList.add('show');
 $('onbGo').onclick=finishOnb;
